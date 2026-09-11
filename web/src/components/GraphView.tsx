@@ -164,6 +164,14 @@ export function GraphView({ nodes, edges, onSelect }: Props) {
       cy.resize()
     })
     observer.observe(containerRef.current)
+    cy.one('layoutstop', () => {
+      cy.resize()
+      cy.fit(cy.elements(), 56)
+    })
+    requestAnimationFrame(() => {
+      cy.resize()
+      cy.fit(cy.elements(), 56)
+    })
     cyRef.current = cy
 
     return () => {
