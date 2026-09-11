@@ -6,3 +6,4 @@ pydantic-settings==2.10.1
 email-validator==2.2.0
 holehe==1.61
 maigret==0.6.5
+psycopg[binary]>=3.2,<4

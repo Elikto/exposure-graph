@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     app_name: str = "ExposureGraph"
     data_dir: str = "/data"
+    database_url: str = ""
 
     flowsint_base_url: str = "http://host.docker.internal:5001"
     flowsint_api_token: str = ""
