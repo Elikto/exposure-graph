@@ -28,8 +28,8 @@ class FlowsintConnector:
                 resp = await client.get(url, headers=headers)
             resp.raise_for_status()
             data = resp.json()
-            raw_nodes = data.get("nodes", []) if isinstance(data, dict) else []
-            raw_edges = data.get("edges", data.get("links", [])) if isinstance(data, dict) else []
+            raw_nodes = data.get("nodes", data.get("nds", [])) if isinstance(data, dict) else []
+            raw_edges = data.get("edges", data.get("links", data.get("rls", []))) if isinstance(data, dict) else []
             nodes: list[GraphNode] = []
             edges: list[GraphEdge] = []
             id_map: set[str] = set()
