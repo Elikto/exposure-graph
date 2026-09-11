@@ -3,6 +3,7 @@ import httpx
 
 from app.config import settings
 from app.models import GraphEdge, GraphNode, SourceRun
+from app.storage import get_integration
 from .base import ConnectorResult
 
 
@@ -13,11 +14,13 @@ class VirusTotalConnector:
         started = time.perf_counter()
         if kind not in {"domain", "ip"}:
             return ConnectorResult(run=SourceRun(name=self.name, status="skipped", message="Domain/IP only"))
-        if not settings.vt_api_key:
-            return ConnectorResult(run=SourceRun(name=self.name, status="needs_key", message="VT_API_KEY required"))
+        integration = get_integration("threat_intel") or {}
+        api_key = str(integration.get("vt_api_key") or settings.vt_api_key or "")
+        if not api_key:
+            return ConnectorResult(run=SourceRun(name=self.name, status="needs_key", message="VirusTotal API key required"))
         path = f"domains/{query}" if kind == "domain" else f"ip_addresses/{query}"
         url = f"https://www.virustotal.com/api/v3/{path}"
-        headers = {"x-apikey": settings.vt_api_key, "User-Agent": "ExposureGraph/0.2"}
+        headers = {"x-apikey": api_key, "User-Agent": "ExposureGraph/0.3"}
         try:
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(url, headers=headers)

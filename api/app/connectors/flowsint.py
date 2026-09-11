@@ -76,6 +76,28 @@ class FlowsintConnector:
                     confidence=0.9,
                 ))
 
+            if matched_ids:
+                adjacency: dict[str, set[str]] = {node_id: set() for node_id in id_map}
+                for edge in raw_edges[:2500]:
+                    source = edge.get("source") or edge.get("from") or edge.get("from_id")
+                    target = edge.get("target") or edge.get("to") or edge.get("to_id")
+                    if isinstance(source, dict): source = source.get("id")
+                    if isinstance(target, dict): target = target.get("id")
+                    source, target = str(source or ""), str(target or "")
+                    if source in adjacency and target in adjacency:
+                        adjacency[source].add(target)
+                        adjacency[target].add(source)
+                keep = set(matched_ids)
+                frontier = set(matched_ids)
+                for _ in range(2):
+                    frontier = {n for cur in frontier for n in adjacency.get(cur, set())} - keep
+                    keep |= frontier
+                nodes = [n for n in nodes if n.id.removeprefix("flowsint:") in keep]
+                edges = [e for e in edges if e.source.removeprefix("flowsint:") in keep and e.target.removeprefix("flowsint:") in keep]
+            else:
+                nodes = []
+                edges = []
+
             for matched in matched_ids[:20]:
                 edges.append(GraphEdge(
                     id=f"{root_id}->flowsint:{matched}",
