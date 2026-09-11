@@ -1,0 +1,22 @@
+services:
+  api:
+    build: ./api
+    container_name: exposure-graph-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8010:8010"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  web:
+    build: ./web
+    container_name: exposure-graph-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5180:8080"
