@@ -22,7 +22,7 @@ from app.connectors.shodan import ShodanConnector
 app = FastAPI(title="ExposureGraph API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5180", "http://127.0.0.1:5180"],
+    allow_origins=["http://localhost:5180", "http://127.0.0.1:5180", "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -187,6 +187,27 @@ async def flowsint_integration_status() -> dict:
         return {"connected": True, "email": user.get("email"), "sketch_id": (get_integration("flowsint") or {}).get("sketch_id") or settings.flowsint_sketch_id}
     except Exception as exc:
         return {"connected": False, "error": str(exc), "sketch_id": settings.flowsint_sketch_id}
+
+
+@app.post("/api/integrations/flowsint/session")
+async def flowsint_integration_session(payload: dict) -> dict:
+    token = str(payload.get("token", "")).strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Flowsint session token is required")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{settings.flowsint_base_url.rstrip('/')}/api/auth/me", headers=headers)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid or expired Flowsint session")
+        user = resp.json()
+        email = str(user.get("email") or "")
+        set_integration("flowsint", {"access_token": token, "email": email, "sketch_id": settings.flowsint_sketch_id})
+        return {"connected": True, "email": email, "sketch_id": settings.flowsint_sketch_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Flowsint bridge error: {exc}")
 
 
 @app.post("/api/integrations/flowsint/login")
