@@ -89,13 +89,13 @@ export function saveThreatIntelKeys(vt_api_key: string, shodan_api_key: string):
 }
 
 
-export function fetchIdentityOsintStatus(): Promise<{trestle:boolean}> {
+export function fetchIdentityOsintStatus(): Promise<{trestle:boolean; pdl:boolean}> {
   return json('/api/integrations/identity-osint')
 }
 
-export function saveIdentityOsintKey(trestle_api_key: string): Promise<{trestle:boolean}> {
+export function saveIdentityOsintKey(trestle_api_key: string, pdl_api_key: string): Promise<{trestle:boolean; pdl:boolean}> {
   return json('/api/integrations/identity-osint', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trestle_api_key }),
+    body: JSON.stringify({ trestle_api_key, pdl_api_key }),
   })
 }
