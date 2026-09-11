@@ -3,7 +3,7 @@ import {
   AlertTriangle, Database, ExternalLink, History, Link2, Loader2, Network,
   Search, ShieldCheck, Sparkles, Trash2, UserRound
 } from 'lucide-react'
-import { addMonitoredIdentity, fetchConnectors, fetchFlowsintStatus, fetchMonitoredIdentities, fetchRemovalLinks, fetchSearch, fetchSearches, fetchThreatIntelStatus, loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch, saveThreatIntelKeys } from './api'
+import { addMonitoredIdentity, fetchConnectors, fetchFlowsintStatus, fetchMonitoredIdentities, fetchRemovalLinks, fetchSearch, fetchSearches, fetchThreatIntelStatus, fetchIdentityOsintStatus, loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch, saveThreatIntelKeys, saveIdentityOsintKey } from './api'
 import { GraphView } from './components/GraphView'
 import type { ConnectorStatus, FlowsintStatus, MonitoredIdentity, RemovalLink, SearchResponse, SelectedItem } from './types'
 import './styles.css'
@@ -67,7 +67,7 @@ export default function App() {
   const [monitored, setMonitored] = useState<MonitoredIdentity[]>([])
   const [monitorEmail, setMonitorEmail] = useState('')
   const [flowsintStatus, setFlowsintStatus] = useState<FlowsintStatus>({ connected: false })
-  const [flowsintEmail, setFlowsintEmail] = useState('fabio13200@hotmail.fr')
+  const [flowsintEmail, setFlowsintEmail] = useState('')
   const [flowsintPassword, setFlowsintPassword] = useState('')
   const [flowsintBusy, setFlowsintBusy] = useState(false)
   const [removalLinks, setRemovalLinks] = useState<Record<string, RemovalLink>>({})
@@ -75,6 +75,9 @@ export default function App() {
   const [vtKey, setVtKey] = useState('')
   const [shodanKey, setShodanKey] = useState('')
   const [intelBusy, setIntelBusy] = useState(false)
+  const [identityStatus, setIdentityStatus] = useState({ trestle: false })
+  const [trestleKey, setTrestleKey] = useState('')
+  const [identityBusy, setIdentityBusy] = useState(false)
 
   const refreshMeta = useCallback(async () => {
     const [connectorData, historyData] = await Promise.all([
@@ -90,6 +93,7 @@ export default function App() {
     fetchMonitoredIdentities().then(setMonitored).catch(() => setMonitored([]))
     fetchFlowsintStatus().then(setFlowsintStatus).catch(() => setFlowsintStatus({ connected: false }))
     fetchThreatIntelStatus().then(setIntelStatus).catch(() => setIntelStatus({ virustotal: false, shodan: false }))
+    fetchIdentityOsintStatus().then(setIdentityStatus).catch(() => setIdentityStatus({ trestle: false }))
   }, [refreshMeta])
 
   useEffect(() => {
@@ -157,6 +161,22 @@ export default function App() {
       setError(err instanceof Error ? err.message : 'Unable to save API keys')
     } finally {
       setIntelBusy(false)
+    }
+  }
+
+  async function saveIdentityKey() {
+    if (!trestleKey.trim()) return
+    setIdentityBusy(true)
+    setError('')
+    try {
+      const status = await saveIdentityOsintKey(trestleKey.trim())
+      setIdentityStatus(status)
+      setTrestleKey('')
+      await refreshMeta()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save identity API key')
+    } finally {
+      setIdentityBusy(false)
     }
   }
 
@@ -343,6 +363,20 @@ export default function App() {
               {intelBusy ? 'Saving…' : 'Connect intelligence sources'}
             </button>
             <small>Keys stay in the local ExposureGraph database and are never returned to the browser after saving.</small>
+          </section>
+
+          <section className="side-section intel-section">
+            <div className="section-title"><UserRound size={15} /> Phone identity</div>
+            <div className="intel-status-row">
+              <span className={identityStatus.trestle ? 'intel-on' : ''}>Trestle Identity</span>
+              <span className="intel-on">Flowsint active</span>
+            </div>
+            <input type="password" value={trestleKey} onChange={(e) => setTrestleKey(e.target.value)} placeholder="Trestle API key" />
+            <button type="button" onClick={saveIdentityKey} disabled={identityBusy || !trestleKey.trim()}>
+              {identityBusy ? 'Saving…' : 'Connect phone identity'}
+            </button>
+            <a href="https://www.truecaller.com/fr-fr/reverse-phone-number-lookup" target="_blank" rel="noreferrer">Manual Truecaller check <ExternalLink size={12} /></a>
+            <small>Authorized phone searches actively launch Flowsint enrichers. Trestle can add owner names, addresses and associated emails when its coverage returns a match.</small>
           </section>
 
           <section className="side-section watch-services">
