@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.models import ConnectorStatus, GraphNode, SearchRequest, SearchResponse
+from app.models import ConnectorStatus, GraphEdge, GraphNode, SearchRequest, SearchResponse
 from app.storage import delete_integration, get_integration, get_search, init_db, list_searches, save_search, set_integration
 from app.utils import detect_kind, root_node_id
 from app.connectors.crtsh import CRTSHConnector
@@ -20,6 +20,10 @@ from app.connectors.virustotal import VirusTotalConnector
 from app.connectors.shodan import ShodanConnector
 from app.connectors.trestle import TrestleConnector
 from app.connectors.people_data_labs import PeopleDataLabsConnector
+from app.connectors.github_email import GitHubEmailConnector
+from app.connectors.holehe import HoleheConnector
+from app.connectors.maigret_public import MaigretPublicConnector
+from app.connectors.brave_search import BraveSearchConnector
 
 app = FastAPI(title="ExposureGraph API", version="0.1.0")
 app.add_middleware(
@@ -30,7 +34,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), TrestleConnector(), PeopleDataLabsConnector(), FlowsintConnector()]
+MAIGRET = MaigretPublicConnector()
+CONNECTORS = [
+    HIBPConnector(), GravatarConnector(), GitHubEmailConnector(), HoleheConnector(), BraveSearchConnector(),
+    RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(),
+    TrestleConnector(), PeopleDataLabsConnector(), MAIGRET, FlowsintConnector(),
+]
 
 
 REMOVAL_OVERRIDES = {
@@ -67,15 +76,19 @@ def health() -> dict:
 def connector_statuses() -> list[ConnectorStatus]:
     return [
         ConnectorStatus(name="Flowsint", configured=bool((get_integration("flowsint") or {}).get("access_token") or settings.flowsint_api_token), category="OSINT graph", requires_key=True, note="Graph plus Maigret, Sherlock, Holehe and other local enrichers after login"),
-        ConnectorStatus(name="Have I Been Pwned", configured=bool(settings.hibp_api_key), category="Breach intelligence", requires_key=True, note="Breaches, pastes, official stealer-log domains when plan/verification permits"),
-        ConnectorStatus(name="Gravatar", configured=settings.enable_gravatar, category="Public identity", note="Public avatar presence"),
+        ConnectorStatus(name="Have I Been Pwned", configured=bool((get_integration("email_osint") or {}).get("hibp_api_key") or settings.hibp_api_key), category="Breach intelligence", requires_key=True, note="Official breaches, pastes and stealer-log domains when the HIBP plan permits"),
+        ConnectorStatus(name="Gravatar", configured=settings.enable_gravatar, category="Public identity", note="Exact-email public profile, username, display name and avatar"),
+        ConnectorStatus(name="GitHub Public Email", configured=True, category="Public identity", note="Exact public commit-author email to GitHub account correlation"),
+        ConnectorStatus(name="Holehe", configured=True, category="Account presence", note="Checks public account-existence signals without password recovery"),
+        ConnectorStatus(name="Maigret Public Profiles", configured=True, category="Public profiles", note="Scans hundreds of public sites for discovered usernames; matches are candidates until corroborated"),
+        ConnectorStatus(name="Brave Web Search", configured=bool((get_integration("email_osint") or {}).get("brave_api_key") or settings.brave_api_key), category="Public web index", requires_key=True, note="Exact-phrase web search across Brave's independent index"),
         ConnectorStatus(name="RDAP", configured=settings.enable_rdap, category="Infrastructure", note="Domain/IP registration data"),
         ConnectorStatus(name="Certificate Transparency", configured=settings.enable_crtsh, category="Infrastructure", note="crt.sh certificate names"),
         ConnectorStatus(name="urlscan.io", configured=settings.enable_urlscan, category="Public web scans", requires_key=False, note="Public historical URL/domain scans; API key increases quota"),
         ConnectorStatus(name="VirusTotal", configured=bool((get_integration("threat_intel") or {}).get("vt_api_key") or settings.vt_api_key), category="Reputation", requires_key=True, note="Domain/IP reputation and detections"),
         ConnectorStatus(name="Shodan", configured=True, category="Infrastructure", requires_key=False, note="Shodan InternetDB active; optional API key unlocks the full Shodan host API"),
         ConnectorStatus(name="Trestle Identity", configured=bool((get_integration("identity_osint") or {}).get("trestle_api_key")), category="Identity enrichment", requires_key=True, note="Authorized reverse-phone identity: owner, addresses and associated emails when coverage permits"),
-        ConnectorStatus(name="People Data Labs", configured=bool((get_integration("identity_osint") or {}).get("pdl_api_key")), category="Identity enrichment", requires_key=True, note="Authorized person enrichment from phone with likelihood scoring"),
+        ConnectorStatus(name="People Data Labs", configured=bool((get_integration("identity_osint") or {}).get("pdl_api_key")), category="Identity enrichment", requires_key=True, note="Authorized person enrichment from email or phone with likelihood scoring"),
     ]
 
 
@@ -97,6 +110,24 @@ def configure_threat_intel(payload: dict) -> dict:
     shodan = str(payload.get("shodan_api_key") or current.get("shodan_api_key") or "").strip()
     set_integration("threat_intel", {"vt_api_key": vt, "shodan_api_key": shodan})
     return {"virustotal": bool(vt), "shodan": bool(shodan)}
+
+
+@app.get("/api/integrations/email-osint")
+def email_osint_status() -> dict:
+    saved = get_integration("email_osint") or {}
+    return {
+        "hibp": bool(saved.get("hibp_api_key") or settings.hibp_api_key),
+        "brave": bool(saved.get("brave_api_key") or settings.brave_api_key),
+    }
+
+
+@app.post("/api/integrations/email-osint")
+def configure_email_osint(payload: dict) -> dict:
+    current = get_integration("email_osint") or {}
+    hibp = str(payload.get("hibp_api_key") or current.get("hibp_api_key") or "").strip()
+    brave = str(payload.get("brave_api_key") or current.get("brave_api_key") or "").strip()
+    set_integration("email_osint", {"hibp_api_key": hibp, "brave_api_key": brave})
+    return {"hibp": bool(hibp), "brave": bool(brave)}
 
 
 @app.get("/api/integrations/identity-osint")
@@ -203,20 +234,133 @@ async def search(request: SearchRequest) -> SearchResponse:
                 edge_map[edge.id] = edge
         breaches.extend(item.breaches)
 
+    # Full e-mail scan: follow usernames that were discovered from exact/high-confidence
+    # e-mail sources into public-profile enumeration. A bare e-mail local-part is scanned
+    # only as a low-confidence candidate and is never presented as confirmed ownership.
+    if kind == "email":
+        username_candidates: dict[str, tuple[str, float, str]] = {}
+        username_keys = ("username", "handle", "screen_name", "screenName", "login", "preferredUsername")
+        for node in list(node_map.values()):
+            if node.source == "Search input":
+                continue
+            values: list[str] = []
+            if node.type.lower() == "username":
+                values.append(node.label)
+            for key in username_keys:
+                value = node.properties.get(key)
+                if isinstance(value, str) and value.strip():
+                    values.append(value.strip())
+            for value in values:
+                candidate = value.strip().lstrip("@")
+                if len(candidate) < 2 or " " in candidate or "@" in candidate:
+                    continue
+                score = float(node.confidence)
+                existing = username_candidates.get(candidate.lower())
+                if not existing or score > existing[1]:
+                    username_candidates[candidate.lower()] = (node.id, score, node.source)
+
+        local_part = query.split("@", 1)[0].strip().lstrip("@")
+        if len(local_part) >= 3 and local_part.lower() not in username_candidates:
+            derived_id = f"derived:username:{local_part.lower()}"
+            node_map[derived_id] = GraphNode(
+                id=derived_id,
+                type="username",
+                label=local_part,
+                properties={
+                    "username": local_part,
+                    "evidence_level": "candidate",
+                    "match_reason": "Derived from the email local-part only; not proof of ownership",
+                },
+                source="Email local-part candidate",
+                confidence=0.40,
+                risk=0,
+            )
+            edge_map[f"{root_id}->{derived_id}"] = GraphEdge(
+                id=f"{root_id}->{derived_id}",
+                source=root_id,
+                target=derived_id,
+                label="POSSIBLE_USERNAME",
+                source_name="Derived candidate",
+                confidence=0.40,
+            )
+            username_candidates[local_part.lower()] = (derived_id, 0.40, "Email local-part candidate")
+
+        known_names: set[str] = set()
+        for known_node in node_map.values():
+            if known_node.confidence < 0.85:
+                continue
+            for key in ("display_name", "displayName", "full_name", "fullName", "fullname", "name"):
+                value = known_node.properties.get(key)
+                if isinstance(value, str) and len(value.strip()) >= 6:
+                    known_names.add(" ".join(value.lower().split()))
+            if known_node.type.lower() in {"person", "individual"} and len(known_node.label.strip()) >= 6:
+                known_names.add(" ".join(known_node.label.lower().split()))
+
+        ranked_candidates = sorted(username_candidates.items(), key=lambda item: item[1][1], reverse=True)[:3]
+        expansion_results = await asyncio.gather(
+            *(MAIGRET.run(username_key, "username", data[0]) for username_key, data in ranked_candidates),
+            return_exceptions=True,
+        )
+        for (username_key, (parent_id, evidence_confidence, evidence_source)), expanded in zip(ranked_candidates, expansion_results):
+            if isinstance(expanded, Exception):
+                warnings.append(f"Maigret {username_key}: {expanded}")
+                continue
+            if expanded.run:
+                expanded.run.message = f"{username_key}: {expanded.run.message}"
+                source_runs.append(expanded.run)
+            base_profile_confidence = 0.58 if evidence_confidence >= 0.80 else 0.42
+            for node in expanded.nodes:
+                extracted_name = ""
+                for key in ("display_name", "displayName", "full_name", "fullName", "fullname", "name"):
+                    value = node.properties.get(key)
+                    if isinstance(value, str) and value.strip():
+                        extracted_name = " ".join(value.lower().split())
+                        break
+                name_corroborated = bool(extracted_name and extracted_name in known_names)
+                node.confidence = 0.84 if name_corroborated else base_profile_confidence
+                node.properties["evidence_level"] = "probable" if name_corroborated else "candidate"
+                node.properties["derived_from_username"] = username_key
+                node.properties["username_evidence_source"] = evidence_source
+                node.properties["match_reason"] = (
+                    "Username match plus a public display-name match from an independent email-linked source"
+                    if name_corroborated
+                    else "Same public username found on this site; this alone does not prove account ownership"
+                )
+                if node.id not in node_map:
+                    node_map[node.id] = node
+            for edge in expanded.edges:
+                edge.confidence = base_profile_confidence
+                if edge.id not in edge_map:
+                    edge_map[edge.id] = edge
+
     identity_types = {"person", "individual", "email", "address", "socialaccount", "username"}
+
+    def evidence_key(node: GraphNode) -> tuple[str, str]:
+        node_type = node.type.lower()
+        if node_type == "socialaccount":
+            raw_url = node.properties.get("profile_url") or node.properties.get("profileUrl") or node.properties.get("url")
+            if raw_url:
+                return node_type, str(raw_url).strip().lower().rstrip("/")
+        return node_type, " ".join(node.label.lower().split()).rstrip("/")
+
     evidence: dict[tuple[str, str], set[str]] = {}
+    max_evidence_confidence: dict[tuple[str, str], float] = {}
     for node in node_map.values():
         if node.type.lower() not in identity_types or node.source == "Search input":
             continue
-        key = (node.type.lower(), " ".join(node.label.lower().split()).rstrip("/"))
+        key = evidence_key(node)
         evidence.setdefault(key, set()).add(node.source)
+        max_evidence_confidence[key] = max(max_evidence_confidence.get(key, 0.0), float(node.confidence))
     for node in node_map.values():
-        key = (node.type.lower(), " ".join(node.label.lower().split()).rstrip("/"))
+        key = evidence_key(node)
         sources = sorted(evidence.get(key, set()))
         if len(sources) >= 2:
             node.properties["corroborated"] = True
             node.properties["corroborated_sources"] = sources
-            node.confidence = max(node.confidence, min(0.99, 0.75 + 0.08 * len(sources)))
+            strong_anchor = max_evidence_confidence.get(key, 0.0) >= 0.95
+            node.properties["evidence_level"] = "confirmed" if strong_anchor else "probable"
+            target_confidence = 0.96 if strong_anchor else min(0.91, 0.75 + 0.08 * len(sources))
+            node.confidence = max(node.confidence, target_confidence)
 
     if kind in {"person", "address"}:
         warnings.append(

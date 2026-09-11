@@ -4,9 +4,9 @@ import {
   History, KeyRound, Link2, Loader2, Network, Search, ShieldCheck, Trash2, UserRound
 } from 'lucide-react'
 import {
-  addMonitoredIdentity, fetchConnectors, fetchFlowsintStatus, fetchIdentityOsintStatus,
+  addMonitoredIdentity, fetchConnectors, fetchEmailOsintStatus, fetchFlowsintStatus, fetchIdentityOsintStatus,
   fetchMonitoredIdentities, fetchRemovalLinks, fetchSearch, fetchSearches, fetchThreatIntelStatus,
-  loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch, saveIdentityOsintKey,
+  loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch, saveEmailOsintKeys, saveIdentityOsintKey,
   saveThreatIntelKeys,
 } from './api'
 import { GraphViewV2 } from './components/GraphViewV2'
@@ -22,7 +22,7 @@ const kinds = [
 type RightTab = 'sites' | 'inspect' | 'exposure'
 type SiteAppearance = {
   node: GraphNode; url: string; domain: string; platform: string; username: string;
-  displayName: string; createdAt: string; source: string; confidence: number;
+  displayName: string; createdAt: string; source: string; confidence: number; evidenceLevel: string;
   removal?: RemovalLink;
 }
 
@@ -66,7 +66,17 @@ function platformFrom(node: GraphNode, url: string) {
   return first(node.properties || {}, ['platform', 'service', 'site_name', 'network']) || domainFor(url) || node.label
 }
 function displayNameFrom(node: GraphNode) {
-  return first(node.properties || {}, ['display_name', 'displayName', 'full_name', 'fullName', 'name']) || node.label
+  return first(node.properties || {}, ['display_name', 'displayName', 'full_name', 'fullName', 'name', 'fullname']) || node.label
+}
+function evidenceFrom(node: GraphNode) {
+  const explicit = first(node.properties || {}, ['evidence_level']).toLowerCase()
+  if (explicit === 'confirmed') return 'confirmé'
+  if (explicit === 'candidate') return 'candidat'
+  if (explicit === 'probable') return 'probable'
+  if (explicit) return explicit
+  if (node.confidence >= .92) return 'confirmé'
+  if (node.confidence >= .68) return 'probable'
+  return 'candidat'
 }
 function cleanHtml(value: string | null | undefined) {
   return (value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -94,6 +104,10 @@ export default function AppV2() {
   const [vtKey, setVtKey] = useState('')
   const [shodanKey, setShodanKey] = useState('')
   const [intelBusy, setIntelBusy] = useState(false)
+  const [emailStatus, setEmailStatus] = useState({ hibp: false, brave: false })
+  const [hibpKey, setHibpKey] = useState('')
+  const [braveKey, setBraveKey] = useState('')
+  const [emailBusy, setEmailBusy] = useState(false)
   const [identityStatus, setIdentityStatus] = useState({ trestle: false, pdl: false })
   const [trestleKey, setTrestleKey] = useState('')
   const [pdlKey, setPdlKey] = useState('')
@@ -109,6 +123,7 @@ export default function AppV2() {
     fetchMonitoredIdentities().then(setMonitored).catch(() => setMonitored([]))
     fetchFlowsintStatus().then(setFlowsintStatus).catch(() => setFlowsintStatus({ connected: false }))
     fetchThreatIntelStatus().then(setIntelStatus).catch(() => setIntelStatus({ virustotal:false, shodan:false }))
+    fetchEmailOsintStatus().then(setEmailStatus).catch(() => setEmailStatus({ hibp:false, brave:false }))
     fetchIdentityOsintStatus().then(setIdentityStatus).catch(() => setIdentityStatus({ trestle:false, pdl:false }))
   }, [refresh])
 
@@ -126,7 +141,7 @@ export default function AppV2() {
       const appearance: SiteAppearance = {
         node, url: resolvedUrl, domain, platform: platformFrom(node, resolvedUrl), username,
         displayName: displayNameFrom(node), createdAt: createdFrom(node), source: node.source,
-        confidence: node.confidence, removal: removalLinks[domain],
+        confidence: node.confidence, evidenceLevel: evidenceFrom(node), removal: removalLinks[domain],
       }
       const key = `${domain}|${username || appearance.displayName}`.toLowerCase()
       const old = map.get(key)
@@ -193,6 +208,12 @@ export default function AppV2() {
     catch (err) { setError(err instanceof Error ? err.message : 'Clés non enregistrées') }
     finally { setIntelBusy(false) }
   }
+  async function saveEmailOsint() {
+    setEmailBusy(true); setError('')
+    try { setEmailStatus(await saveEmailOsintKeys(hibpKey.trim(), braveKey.trim())); setHibpKey(''); setBraveKey(''); await refresh() }
+    catch (err) { setError(err instanceof Error ? err.message : 'Clés e-mail OSINT non enregistrées') }
+    finally { setEmailBusy(false) }
+  }
   async function saveIdentity() {
     setIdentityBusy(true); setError('')
     try { setIdentityStatus(await saveIdentityOsintKey(trestleKey.trim(), pdlKey.trim())); setTrestleKey(''); setPdlKey(''); await refresh() }
@@ -226,7 +247,7 @@ export default function AppV2() {
           <div className="eg2-kicker">Nouvelle recherche</div>
           <div className="eg2-searchbox"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="e-mail, téléphone, pseudo, domaine, IP…" autoComplete="off"/></div>
           <select value={kind} onChange={e=>setKind(e.target.value)}>{kinds.map(([v,l])=><option value={v} key={v}>{l}</option>)}</select>
-          <button className="eg2-primary" disabled={loading || !query.trim()}>{loading?<Loader2 className="spin" size={17}/>:<Search size={17}/>}Analyser</button>
+          <button className="eg2-primary" disabled={loading || !query.trim()}>{loading?<Loader2 className="spin" size={17}/>:<Search size={17}/>}{loading?'Scan complet en cours…':'Lancer le scan complet'}</button>
           {error && <div className="eg2-error"><AlertTriangle size={14}/>{error}</div>}
         </form>
 
@@ -235,7 +256,9 @@ export default function AppV2() {
         </div></details>
 
         <details className="eg2-menu"><summary><KeyRound size={15}/> API & identité</summary><div className="eg2-menu-body eg2-form-stack">
-          <div className="eg2-status-pills"><span className={intelStatus.virustotal?'on':''}>VirusTotal</span><span className={intelStatus.shodan?'on':''}>Shodan</span><span className={identityStatus.trestle?'on':''}>Trestle</span><span className={identityStatus.pdl?'on':''}>PDL</span></div>
+          <div className="eg2-status-pills"><span className={emailStatus.hibp?'on':''}>HIBP</span><span className={emailStatus.brave?'on':''}>Brave Web</span><span className={intelStatus.virustotal?'on':''}>VirusTotal</span><span className={intelStatus.shodan?'on':''}>Shodan</span><span className={identityStatus.trestle?'on':''}>Trestle</span><span className={identityStatus.pdl?'on':''}>PDL</span></div>
+          <input type="password" value={hibpKey} onChange={e=>setHibpKey(e.target.value)} placeholder="Have I Been Pwned API key"/><input type="password" value={braveKey} onChange={e=>setBraveKey(e.target.value)} placeholder="Brave Search API key"/>
+          <button onClick={saveEmailOsint} type="button" disabled={emailBusy}>{emailBusy?'Enregistrement…':'Enregistrer Email OSINT'}</button>
           <input type="password" value={vtKey} onChange={e=>setVtKey(e.target.value)} placeholder="VirusTotal API key"/><input type="password" value={shodanKey} onChange={e=>setShodanKey(e.target.value)} placeholder="Shodan API key"/>
           <button onClick={saveIntel} type="button" disabled={intelBusy}>{intelBusy?'Enregistrement…':'Enregistrer Threat Intel'}</button>
           <input type="password" value={trestleKey} onChange={e=>setTrestleKey(e.target.value)} placeholder="Trestle API key"/><input type="password" value={pdlKey} onChange={e=>setPdlKey(e.target.value)} placeholder="People Data Labs API key"/>
@@ -265,10 +288,11 @@ export default function AppV2() {
         <div className="eg2-right-scroll eg2-scroll">
           {rightTab==='sites'&&<section className="eg2-tab-content">
             <div className="eg2-section-head"><div><span>Présence de l’identifiant</span><h2>Sites & profils détectés</h2></div><Globe2 size={20}/></div>
+            {result&&<details className="eg2-scan-report" open><summary>Rapport du scan · {result.sources.filter(s=>s.status==='ok').length} sources exécutées</summary><div>{result.sources.map((s,i)=><div key={`${s.name}-${i}`}><span className={`scan-dot ${s.status}`}/><div><b>{s.name}</b><small>{s.message||s.status}</small></div><em>{s.status}</em></div>)}</div></details>}
             {linkedUsernames.length>0&&<div className="eg2-username-strip"><span>Pseudos liés</span><div>{linkedUsernames.map(u=><button key={u} onClick={()=>{setQuery(u);setKind('username')}}>@{u}</button>)}</div></div>}
             {selectedAppearance&&<article className="eg2-selected-site"><div className="eg2-selected-icon"><Globe2 size={19}/></div><div><span>Nœud sélectionné</span><h3>{selectedAppearance.platform}</h3><p>{selectedAppearance.username?`@${selectedAppearance.username}`:selectedAppearance.displayName}</p></div><a href={selectedAppearance.url} target="_blank" rel="noreferrer">Ouvrir <ExternalLink size={13}/></a></article>}
             <div className="eg2-site-list">{siteAppearances.map(site=><article className={`eg2-site-card ${selectedNode?.id===site.node.id?'selected':''}`} key={`${site.node.id}|${site.url}`} onClick={()=>{setSelected({kind:'node',data:site.node});setRightTab('sites')}}>
-              <header><div><b>{site.platform}</b><small>{site.domain}</small></div><span>{Math.round(site.confidence*100)}%</span></header>
+              <header><div><b>{site.platform}</b><small>{site.domain}</small></div><span>{site.evidenceLevel} · {Math.round(site.confidence*100)}%</span></header>
               <div className="eg2-site-grid"><div><span>Pseudo</span><b>{site.username?`@${site.username}`:'—'}</b></div><div><span>Nom affiché</span><b>{site.displayName||'—'}</b></div><div><span>Création / 1re trace</span><b>{site.createdAt||'Non fournie'}</b></div><div><span>Source</span><b>{site.source}</b></div></div>
               <div className="eg2-card-actions"><a href={site.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}><ExternalLink size={12}/> Ouvrir le profil</a>{site.removal?.url&&<a className="danger" href={site.removal.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}><Trash2 size={12}/> Suppression</a>}</div>
               <details className="eg2-raw" onClick={e=>e.stopPropagation()}><summary>Toutes les informations <ChevronRight size={12}/></summary><div>{Object.entries(site.node.properties||{}).map(([k,v])=><div key={k}><span>{k}</span><b>{clean(v)||'—'}</b></div>)}</div></details>
