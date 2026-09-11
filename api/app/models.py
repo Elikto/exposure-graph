@@ -73,3 +73,20 @@ class ConnectorStatus(BaseModel):
     category: str
     requires_key: bool = False
     note: str = ""
+
+
+class MonitoredIdentityCreate(BaseModel):
+    value: str = Field(min_length=3, max_length=320)
+    kind: Literal["email"] = "email"
+    label: str | None = Field(default=None, max_length=120)
+    owned_or_authorized: bool = False
+
+
+class MonitoredIdentity(BaseModel):
+    id: str
+    value: str
+    kind: str
+    label: str | None = None
+    owned_or_authorized: bool
+    created_at: datetime
+    enabled: bool = True

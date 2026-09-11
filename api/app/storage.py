@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import settings
@@ -24,6 +26,19 @@ def init_db() -> None:
                 query TEXT NOT NULL,
                 kind TEXT NOT NULL,
                 payload TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS monitored_identities (
+                id TEXT PRIMARY KEY,
+                value TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,
+                label TEXT,
+                owned_or_authorized INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1
             )
             """
         )
@@ -55,3 +70,46 @@ def get_search(search_id: str) -> SearchResponse | None:
     if not row:
         return None
     return SearchResponse.model_validate(json.loads(row["payload"]))
+
+
+def list_monitored_identities() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, value, kind, label, owned_or_authorized, created_at, enabled "
+            "FROM monitored_identities ORDER BY created_at DESC"
+        ).fetchall()
+    return [
+        {
+            **dict(row),
+            "owned_or_authorized": bool(row["owned_or_authorized"]),
+            "enabled": bool(row["enabled"]),
+        }
+        for row in rows
+    ]
+
+def add_monitored_identity(value: str, kind: str, label: str | None, owned: bool) -> dict:
+    item_id = str(uuid.uuid4())
+    created_at = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO monitored_identities "
+            "(id, value, kind, label, owned_or_authorized, created_at, enabled) VALUES (?, ?, ?, ?, ?, ?, 1)",
+            (item_id, value, kind, label, int(owned), created_at),
+        )
+        conn.commit()
+    return {
+        "id": item_id,
+        "value": value,
+        "kind": kind,
+        "label": label,
+        "owned_or_authorized": owned,
+        "created_at": created_at,
+        "enabled": True,
+    }
+
+
+def delete_monitored_identity(identity_id: str) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM monitored_identities WHERE id = ?", (identity_id,))
+        conn.commit()
+    return cur.rowcount > 0

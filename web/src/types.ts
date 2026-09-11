@@ -63,3 +63,14 @@ export type SelectedItem =
   | { kind: 'node'; data: GraphNode }
   | { kind: 'edge'; data: GraphEdge }
   | null
+
+
+export type MonitoredIdentity = {
+  id: string
+  value: string
+  kind: string
+  label?: string | null
+  owned_or_authorized: boolean
+  created_at: string
+  enabled: boolean
+}

@@ -129,3 +129,34 @@ async def search(request: SearchRequest) -> SearchResponse:
     )
     save_search(result)
     return result
+
+
+@app.get("/api/monitored-identities")
+def monitored_identities() -> list[dict]:
+    from app.storage import list_monitored_identities
+    return list_monitored_identities()
+
+
+@app.post("/api/monitored-identities", status_code=201)
+def create_monitored_identity(payload: dict) -> dict:
+    import sqlite3
+    from app.storage import add_monitored_identity
+    value = str(payload.get("value", "")).strip().lower()
+    kind = str(payload.get("kind", "email"))
+    owned = bool(payload.get("owned_or_authorized", False))
+    label = payload.get("label")
+    if kind != "email" or "@" not in value:
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+    if not owned:
+        raise HTTPException(status_code=400, detail="Ownership or explicit authorization is required")
+    try:
+        return add_monitored_identity(value, kind, label, owned)
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="This email is already monitored")
+
+
+@app.delete("/api/monitored-identities/{identity_id}", status_code=204)
+def remove_monitored_identity(identity_id: str) -> None:
+    from app.storage import delete_monitored_identity
+    if not delete_monitored_identity(identity_id):
+        raise HTTPException(status_code=404, detail="Monitored identity not found")

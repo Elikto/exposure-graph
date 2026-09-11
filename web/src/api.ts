@@ -1,4 +1,4 @@
-import type { ConnectorStatus, SearchResponse } from './types'
+﻿import type { ConnectorStatus, MonitoredIdentity, SearchResponse } from './types'
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
@@ -31,4 +31,21 @@ export function fetchSearches(): Promise<Array<{id: string; created_at: string; 
 
 export function fetchSearch(id: string): Promise<SearchResponse> {
   return json(`/api/searches/${encodeURIComponent(id)}`)
+}
+
+export function fetchMonitoredIdentities(): Promise<MonitoredIdentity[]> {
+  return json('/api/monitored-identities')
+}
+
+export function addMonitoredIdentity(value: string): Promise<MonitoredIdentity> {
+  return json('/api/monitored-identities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value, kind: 'email', owned_or_authorized: true }),
+  })
+}
+
+export async function removeMonitoredIdentity(id: string): Promise<void> {
+  const response = await fetch(`/api/monitored-identities/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
 }

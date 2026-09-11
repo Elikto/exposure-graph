@@ -3,9 +3,9 @@ import {
   AlertTriangle, Database, History, Link2, Loader2, Network,
   Search, ShieldCheck, Sparkles
 } from 'lucide-react'
-import { fetchConnectors, fetchSearch, fetchSearches, runSearch } from './api'
+import { addMonitoredIdentity, fetchConnectors, fetchMonitoredIdentities, fetchSearch, fetchSearches, removeMonitoredIdentity, runSearch } from './api'
 import { GraphView } from './components/GraphView'
-import type { ConnectorStatus, SearchResponse, SelectedItem } from './types'
+import type { ConnectorStatus, MonitoredIdentity, SearchResponse, SelectedItem } from './types'
 import './styles.css'
 
 const kinds = [
@@ -34,6 +34,8 @@ export default function App() {
   const [history, setHistory] = useState<Array<{id: string; created_at: string; query: string; kind: string}>>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [monitored, setMonitored] = useState<MonitoredIdentity[]>([])
+  const [monitorEmail, setMonitorEmail] = useState('')
 
   const refreshMeta = useCallback(async () => {
     const [connectorData, historyData] = await Promise.all([
@@ -46,7 +48,24 @@ export default function App() {
 
   useEffect(() => {
     refreshMeta()
+    fetchMonitoredIdentities().then(setMonitored).catch(() => setMonitored([]))
   }, [refreshMeta])
+
+  async function addMonitor() {
+    if (!monitorEmail.trim()) return
+    try {
+      await addMonitoredIdentity(monitorEmail.trim())
+      setMonitorEmail('')
+      setMonitored(await fetchMonitoredIdentities())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to add email')
+    }
+  }
+
+  async function removeMonitor(id: string) {
+    await removeMonitoredIdentity(id)
+    setMonitored(await fetchMonitoredIdentities())
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -97,7 +116,7 @@ export default function App() {
           <div className="brand-mark"><Network size={20} /></div>
           <div><strong>ExposureGraph</strong><span>self-OSINT exposure monitor</span></div>
         </div>
-        <div className="privacy-pill"><ShieldCheck size={15} /> Local-first • private repo</div>
+        <div className="privacy-pill"><ShieldCheck size={15} /> Local-first ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ private repo</div>
       </header>
 
       <main className="workspace">
@@ -109,7 +128,7 @@ export default function App() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="email, phone, username, domain, IP…"
+                placeholder="email, phone, username, domain, IPÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
                 autoComplete="off"
               />
             </div>
@@ -146,13 +165,37 @@ export default function App() {
             </div>
           </section>
 
+          <section className="side-section monitor-section">
+            <div className="section-title"><ShieldCheck size={15} /> Monitored emails <span>{monitored.length}</span></div>
+            <div className="monitor-add">
+              <input
+                value={monitorEmail}
+                onChange={(e) => setMonitorEmail(e.target.value)}
+                placeholder="another@email.com"
+                type="email"
+              />
+              <button type="button" onClick={addMonitor}>Add</button>
+            </div>
+            <div className="monitor-list">
+              {monitored.map((item) => (
+                <div className="monitor-item" key={item.id}>
+                  <button className="monitor-open" onClick={() => { setQuery(item.value); setKind('email') }}>
+                    <b>{item.label || item.value}</b><small>{item.value}</small>
+                  </button>
+                  <button className="monitor-remove" onClick={() => removeMonitor(item.id)} aria-label="Remove">×</button>
+                </div>
+              ))}
+              {!monitored.length && <p className="muted">Add every email you own and want to monitor.</p>}
+            </div>
+          </section>
+
           <section className="side-section history-section">
             <div className="section-title"><History size={15} /> Recent searches</div>
             <div className="history-list">
               {history.slice(0, 12).map((item) => (
                 <button key={item.id} onClick={() => openHistory(item.id)}>
                   <span>{item.query}</span>
-                  <small>{item.kind} · {new Date(item.created_at).toLocaleString()}</small>
+                  <small>{item.kind} Ãƒâ€šÃ‚Â· {new Date(item.created_at).toLocaleString()}</small>
                 </button>
               ))}
               {!history.length && <p className="muted">No searches yet.</p>}
@@ -188,7 +231,7 @@ export default function App() {
 
           {result?.warnings.length ? (
             <div className="warning-bar">
-              <AlertTriangle size={15} /> {result.warnings.join(' · ')}
+              <AlertTriangle size={15} /> {result.warnings.join(' Ãƒâ€šÃ‚Â· ')}
             </div>
           ) : null}
         </section>
