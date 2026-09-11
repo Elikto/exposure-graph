@@ -4,6 +4,7 @@ import httpx
 
 from app.config import settings
 from app.models import BreachRecord, GraphEdge, GraphNode, SourceRun
+from app.storage import get_integration
 from .base import ConnectorResult
 
 
@@ -13,7 +14,9 @@ class HIBPConnector:
 
     async def run(self, query: str, kind: str, root_id: str) -> ConnectorResult:
         started = time.perf_counter()
-        if not settings.hibp_api_key:
+        integration = get_integration("email_osint") or {}
+        api_key = str(integration.get("hibp_api_key") or settings.hibp_api_key or "").strip()
+        if not api_key:
             return ConnectorResult(run=SourceRun(
                 name=self.name, status="needs_key", message="HIBP_API_KEY required"
             ))
@@ -23,7 +26,7 @@ class HIBPConnector:
             ))
 
         headers = {
-            "hibp-api-key": settings.hibp_api_key,
+            "hibp-api-key": api_key,
             "user-agent": "ExposureGraph-self-monitoring/0.1",
         }
         account = quote(query.strip(), safe="")

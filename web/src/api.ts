@@ -99,3 +99,14 @@ export function saveIdentityOsintKey(trestle_api_key: string, pdl_api_key: strin
     body: JSON.stringify({ trestle_api_key, pdl_api_key }),
   })
 }
+
+export function fetchEmailOsintStatus(): Promise<{hibp:boolean; brave:boolean}> {
+  return json('/api/integrations/email-osint')
+}
+
+export function saveEmailOsintKeys(hibp_api_key: string, brave_api_key: string): Promise<{hibp:boolean; brave:boolean}> {
+  return json('/api/integrations/email-osint', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hibp_api_key, brave_api_key }),
+  })
+}

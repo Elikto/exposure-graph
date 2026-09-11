@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     vt_api_key: str = ""
     shodan_api_key: str = ""
     urlscan_api_key: str = ""
+    brave_api_key: str = ""
 
     enable_gravatar: bool = True
     enable_rdap: bool = True

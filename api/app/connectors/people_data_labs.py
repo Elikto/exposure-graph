@@ -24,25 +24,33 @@ class PeopleDataLabsConnector:
 
     async def run(self, query: str, kind: str, root_id: str) -> ConnectorResult:
         started = time.perf_counter()
-        if kind != 'phone':
-            return ConnectorResult(run=SourceRun(name=self.name, status='skipped', message='Phone only'))
+        if kind not in {'phone', 'email'}:
+            return ConnectorResult(run=SourceRun(name=self.name, status='skipped', message='Phone or email only'))
         integration = get_integration('identity_osint') or {}
         api_key = str(integration.get('pdl_api_key') or '').strip()
         if not api_key:
             return ConnectorResult(run=SourceRun(name=self.name, status='needs_key', message='PDL_API_KEY required'))
-        phone = _phone_query(query)
-        if not phone.startswith('+'):
-            return ConnectorResult(run=SourceRun(
-                name=self.name,
-                status='skipped',
-                message='Use international phone format, e.g. +33…',
-            ))
+        seed = query.strip()
+        identity_params: dict[str, str] = {}
+        if kind == 'phone':
+            phone = _phone_query(query)
+            if not phone.startswith('+'):
+                return ConnectorResult(run=SourceRun(
+                    name=self.name,
+                    status='skipped',
+                    message='Use international phone format, e.g. +33…',
+                ))
+            identity_params['phone'] = phone
+            seed = phone
+        else:
+            identity_params['email'] = query.strip().lower()
+            seed = identity_params['email']
         try:
             async with httpx.AsyncClient(timeout=25) as client:
                 resp = await client.get(
                     'https://api.peopledatalabs.com/v5/person/enrich',
                     params={
-                        'phone': phone,
+                        **identity_params,
                         'min_likelihood': 5,
                         'include_if_matched': 'true',
                     },
@@ -57,7 +65,7 @@ class PeopleDataLabsConnector:
             confidence = likelihood / 10.0
             nodes: list[GraphNode] = []
             edges: list[GraphEdge] = []
-            person_id = f'pdl:person:{_hid(data.get("id") or data.get("full_name") or phone)}'
+            person_id = f'pdl:person:{_hid(data.get("id") or data.get("full_name") or seed)}'
             person_props = {
                 'pdl_id': data.get('id'),
                 'first_name': data.get('first_name'),
