@@ -19,6 +19,7 @@ from app.connectors.urlscan import URLScanConnector
 from app.connectors.virustotal import VirusTotalConnector
 from app.connectors.shodan import ShodanConnector
 from app.connectors.trestle import TrestleConnector
+from app.connectors.people_data_labs import PeopleDataLabsConnector
 
 app = FastAPI(title="ExposureGraph API", version="0.1.0")
 app.add_middleware(
@@ -29,7 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), TrestleConnector(), FlowsintConnector()]
+CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), TrestleConnector(), PeopleDataLabsConnector(), FlowsintConnector()]
 
 
 REMOVAL_OVERRIDES = {
@@ -74,6 +75,7 @@ def connector_statuses() -> list[ConnectorStatus]:
         ConnectorStatus(name="VirusTotal", configured=bool((get_integration("threat_intel") or {}).get("vt_api_key") or settings.vt_api_key), category="Reputation", requires_key=True, note="Domain/IP reputation and detections"),
         ConnectorStatus(name="Shodan", configured=True, category="Infrastructure", requires_key=False, note="Shodan InternetDB active; optional API key unlocks the full Shodan host API"),
         ConnectorStatus(name="Trestle Identity", configured=bool((get_integration("identity_osint") or {}).get("trestle_api_key")), category="Identity enrichment", requires_key=True, note="Authorized reverse-phone identity: owner, addresses and associated emails when coverage permits"),
+        ConnectorStatus(name="People Data Labs", configured=bool((get_integration("identity_osint") or {}).get("pdl_api_key")), category="Identity enrichment", requires_key=True, note="Authorized person enrichment from phone with likelihood scoring"),
     ]
 
 
@@ -100,15 +102,16 @@ def configure_threat_intel(payload: dict) -> dict:
 @app.get("/api/integrations/identity-osint")
 def identity_osint_status() -> dict:
     saved = get_integration("identity_osint") or {}
-    return {"trestle": bool(saved.get("trestle_api_key"))}
+    return {"trestle": bool(saved.get("trestle_api_key")), "pdl": bool(saved.get("pdl_api_key"))}
 
 
 @app.post("/api/integrations/identity-osint")
 def configure_identity_osint(payload: dict) -> dict:
     current = get_integration("identity_osint") or {}
     trestle = str(payload.get("trestle_api_key") or current.get("trestle_api_key") or "").strip()
-    set_integration("identity_osint", {"trestle_api_key": trestle})
-    return {"trestle": bool(trestle)}
+    pdl = str(payload.get("pdl_api_key") or current.get("pdl_api_key") or "").strip()
+    set_integration("identity_osint", {"trestle_api_key": trestle, "pdl_api_key": pdl})
+    return {"trestle": bool(trestle), "pdl": bool(pdl)}
 
 
 @app.post("/api/removal-links")
@@ -199,6 +202,21 @@ async def search(request: SearchRequest) -> SearchResponse:
             if edge.id not in edge_map:
                 edge_map[edge.id] = edge
         breaches.extend(item.breaches)
+
+    identity_types = {"person", "individual", "email", "address", "socialaccount", "username"}
+    evidence: dict[tuple[str, str], set[str]] = {}
+    for node in node_map.values():
+        if node.type.lower() not in identity_types or node.source == "Search input":
+            continue
+        key = (node.type.lower(), " ".join(node.label.lower().split()).rstrip("/"))
+        evidence.setdefault(key, set()).add(node.source)
+    for node in node_map.values():
+        key = (node.type.lower(), " ".join(node.label.lower().split()).rstrip("/"))
+        sources = sorted(evidence.get(key, set()))
+        if len(sources) >= 2:
+            node.properties["corroborated"] = True
+            node.properties["corroborated_sources"] = sources
+            node.confidence = max(node.confidence, min(0.99, 0.75 + 0.08 * len(sources)))
 
     if kind in {"person", "address"}:
         warnings.append(

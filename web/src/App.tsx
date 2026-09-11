@@ -75,8 +75,9 @@ export default function App() {
   const [vtKey, setVtKey] = useState('')
   const [shodanKey, setShodanKey] = useState('')
   const [intelBusy, setIntelBusy] = useState(false)
-  const [identityStatus, setIdentityStatus] = useState({ trestle: false })
+  const [identityStatus, setIdentityStatus] = useState({ trestle: false, pdl: false })
   const [trestleKey, setTrestleKey] = useState('')
+  const [pdlKey, setPdlKey] = useState('')
   const [identityBusy, setIdentityBusy] = useState(false)
 
   const refreshMeta = useCallback(async () => {
@@ -93,7 +94,7 @@ export default function App() {
     fetchMonitoredIdentities().then(setMonitored).catch(() => setMonitored([]))
     fetchFlowsintStatus().then(setFlowsintStatus).catch(() => setFlowsintStatus({ connected: false }))
     fetchThreatIntelStatus().then(setIntelStatus).catch(() => setIntelStatus({ virustotal: false, shodan: false }))
-    fetchIdentityOsintStatus().then(setIdentityStatus).catch(() => setIdentityStatus({ trestle: false }))
+    fetchIdentityOsintStatus().then(setIdentityStatus).catch(() => setIdentityStatus({ trestle: false, pdl: false }))
   }, [refreshMeta])
 
   useEffect(() => {
@@ -165,13 +166,14 @@ export default function App() {
   }
 
   async function saveIdentityKey() {
-    if (!trestleKey.trim()) return
+    if (!trestleKey.trim() && !pdlKey.trim()) return
     setIdentityBusy(true)
     setError('')
     try {
-      const status = await saveIdentityOsintKey(trestleKey.trim())
+      const status = await saveIdentityOsintKey(trestleKey.trim(), pdlKey.trim())
       setIdentityStatus(status)
       setTrestleKey('')
+      setPdlKey('')
       await refreshMeta()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save identity API key')
@@ -368,15 +370,17 @@ export default function App() {
           <section className="side-section intel-section">
             <div className="section-title"><UserRound size={15} /> Phone identity</div>
             <div className="intel-status-row">
-              <span className={identityStatus.trestle ? 'intel-on' : ''}>Trestle Identity</span>
-              <span className="intel-on">Flowsint active</span>
+              <span className={identityStatus.trestle ? 'intel-on' : ''}>Trestle</span>
+              <span className={identityStatus.pdl ? 'intel-on' : ''}>People Data Labs</span>
+              <span className="intel-on">Flowsint</span>
             </div>
             <input type="password" value={trestleKey} onChange={(e) => setTrestleKey(e.target.value)} placeholder="Trestle API key" />
-            <button type="button" onClick={saveIdentityKey} disabled={identityBusy || !trestleKey.trim()}>
+            <input type="password" value={pdlKey} onChange={(e) => setPdlKey(e.target.value)} placeholder="People Data Labs API key" />
+            <button type="button" onClick={saveIdentityKey} disabled={identityBusy || (!trestleKey.trim() && !pdlKey.trim())}>
               {identityBusy ? 'Saving…' : 'Connect phone identity'}
             </button>
             <a href="https://www.truecaller.com/fr-fr/reverse-phone-number-lookup" target="_blank" rel="noreferrer">Manual Truecaller check <ExternalLink size={12} /></a>
-            <small>Authorized phone searches actively launch Flowsint enrichers. Trestle can add owner names, addresses and associated emails when its coverage returns a match.</small>
+            <small>Authorized phone searches actively launch Flowsint enrichers. Trestle and People Data Labs can add corroborating names, addresses, emails and public profiles when their coverage returns a match.</small>
           </section>
 
           <section className="side-section watch-services">
