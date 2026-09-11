@@ -3,9 +3,9 @@ import {
   AlertTriangle, Database, History, Link2, Loader2, Network,
   Search, ShieldCheck, Sparkles
 } from 'lucide-react'
-import { addMonitoredIdentity, fetchConnectors, fetchMonitoredIdentities, fetchSearch, fetchSearches, removeMonitoredIdentity, runSearch } from './api'
+import { addMonitoredIdentity, fetchConnectors, fetchFlowsintStatus, fetchMonitoredIdentities, fetchSearch, fetchSearches, loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch } from './api'
 import { GraphView } from './components/GraphView'
-import type { ConnectorStatus, MonitoredIdentity, SearchResponse, SelectedItem } from './types'
+import type { ConnectorStatus, FlowsintStatus, MonitoredIdentity, SearchResponse, SelectedItem } from './types'
 import './styles.css'
 
 const kinds = [
@@ -36,6 +36,10 @@ export default function App() {
   const [error, setError] = useState('')
   const [monitored, setMonitored] = useState<MonitoredIdentity[]>([])
   const [monitorEmail, setMonitorEmail] = useState('')
+  const [flowsintStatus, setFlowsintStatus] = useState<FlowsintStatus>({ connected: false })
+  const [flowsintEmail, setFlowsintEmail] = useState('fabio13200@hotmail.fr')
+  const [flowsintPassword, setFlowsintPassword] = useState('')
+  const [flowsintBusy, setFlowsintBusy] = useState(false)
 
   const refreshMeta = useCallback(async () => {
     const [connectorData, historyData] = await Promise.all([
@@ -49,6 +53,7 @@ export default function App() {
   useEffect(() => {
     refreshMeta()
     fetchMonitoredIdentities().then(setMonitored).catch(() => setMonitored([]))
+    fetchFlowsintStatus().then(setFlowsintStatus).catch(() => setFlowsintStatus({ connected: false }))
   }, [refreshMeta])
 
   async function addMonitor() {
@@ -65,6 +70,28 @@ export default function App() {
   async function removeMonitor(id: string) {
     await removeMonitoredIdentity(id)
     setMonitored(await fetchMonitoredIdentities())
+  }
+
+  async function connectFlowsint() {
+    if (!flowsintEmail.trim() || !flowsintPassword) return
+    setFlowsintBusy(true)
+    setError('')
+    try {
+      const status = await loginFlowsint(flowsintEmail.trim(), flowsintPassword)
+      setFlowsintStatus(status)
+      setFlowsintPassword('')
+      await refreshMeta()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Flowsint connection failed')
+    } finally {
+      setFlowsintBusy(false)
+    }
+  }
+
+  async function disconnectFlowsint() {
+    await logoutFlowsint()
+    setFlowsintStatus({ connected: false })
+    await refreshMeta()
   }
 
   async function submit(event: FormEvent) {
@@ -116,7 +143,7 @@ export default function App() {
           <div className="brand-mark"><Network size={20} /></div>
           <div><strong>ExposureGraph</strong><span>self-OSINT exposure monitor</span></div>
         </div>
-        <div className="privacy-pill"><ShieldCheck size={15} /> Local-first ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ private repo</div>
+        <div className="privacy-pill"><ShieldCheck size={15} /> Local-first • public code, private local data</div>
       </header>
 
       <main className="workspace">
@@ -128,7 +155,7 @@ export default function App() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="email, phone, username, domain, IPÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+                placeholder="email, phone, username, domain, IP…"
                 autoComplete="off"
               />
             </div>
@@ -165,6 +192,26 @@ export default function App() {
             </div>
           </section>
 
+          <section className="side-section flowsint-section">
+            <div className="section-title"><Network size={15} /> Flowsint bridge</div>
+            {flowsintStatus.connected ? (
+              <div className="flowsint-connected">
+                <span><i className="online" /> Connected as <b>{flowsintStatus.email}</b></span>
+                <small>Graph + local enrichers available. Your password is not stored.</small>
+                <button type="button" onClick={disconnectFlowsint}>Disconnect</button>
+              </div>
+            ) : (
+              <div className="flowsint-login">
+                <input type="email" value={flowsintEmail} onChange={(e) => setFlowsintEmail(e.target.value)} placeholder="Flowsint email" />
+                <input type="password" value={flowsintPassword} onChange={(e) => setFlowsintPassword(e.target.value)} placeholder="Flowsint password" />
+                <button type="button" onClick={connectFlowsint} disabled={flowsintBusy || !flowsintPassword}>
+                  {flowsintBusy ? 'Connecting…' : 'Connect local Flowsint'}
+                </button>
+                <small>Password goes only to your local Flowsint API; ExposureGraph stores only the temporary access token.</small>
+              </div>
+            )}
+          </section>
+
           <section className="side-section monitor-section">
             <div className="section-title"><ShieldCheck size={15} /> Monitored emails <span>{monitored.length}</span></div>
             <div className="monitor-add">
@@ -195,7 +242,7 @@ export default function App() {
               {history.slice(0, 12).map((item) => (
                 <button key={item.id} onClick={() => openHistory(item.id)}>
                   <span>{item.query}</span>
-                  <small>{item.kind} Ãƒâ€šÃ‚Â· {new Date(item.created_at).toLocaleString()}</small>
+                  <small>{item.kind} · {new Date(item.created_at).toLocaleString()}</small>
                 </button>
               ))}
               {!history.length && <p className="muted">No searches yet.</p>}

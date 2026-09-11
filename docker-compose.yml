@@ -1,4 +1,4 @@
-services:
+﻿services:
   api:
     build: ./api
     container_name: exposure-graph-api
@@ -19,4 +19,4 @@ services:
     depends_on:
       - api
     ports:
-      - "5180:8080"
+      - "127.0.0.1:5180:8080"

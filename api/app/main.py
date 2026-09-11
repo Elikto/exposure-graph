@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import httpx
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
@@ -7,13 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.models import ConnectorStatus, GraphNode, SearchRequest, SearchResponse
-from app.storage import get_search, init_db, list_searches, save_search
+from app.storage import delete_integration, get_integration, get_search, init_db, list_searches, save_search, set_integration
 from app.utils import detect_kind, root_node_id
 from app.connectors.crtsh import CRTSHConnector
 from app.connectors.flowsint import FlowsintConnector
 from app.connectors.gravatar import GravatarConnector
 from app.connectors.hibp import HIBPConnector
 from app.connectors.rdap import RDAPConnector
+from app.connectors.urlscan import URLScanConnector
+from app.connectors.virustotal import VirusTotalConnector
+from app.connectors.shodan import ShodanConnector
 
 app = FastAPI(title="ExposureGraph API", version="0.1.0")
 app.add_middleware(
@@ -24,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), FlowsintConnector()]
+CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), FlowsintConnector()]
 
 
 @app.on_event("startup")
@@ -40,13 +44,14 @@ def health() -> dict:
 @app.get("/api/connectors", response_model=list[ConnectorStatus])
 def connector_statuses() -> list[ConnectorStatus]:
     return [
-        ConnectorStatus(name="Flowsint", configured=bool(settings.flowsint_api_token and settings.flowsint_sketch_id), category="OSINT graph", requires_key=True, note="Read-only graph import in MVP"),
+        ConnectorStatus(name="Flowsint", configured=bool((get_integration("flowsint") or {}).get("access_token") or settings.flowsint_api_token), category="OSINT graph", requires_key=True, note="Graph plus Maigret, Sherlock, Holehe and other local enrichers after login"),
         ConnectorStatus(name="Have I Been Pwned", configured=bool(settings.hibp_api_key), category="Breach intelligence", requires_key=True, note="Breaches, pastes, official stealer-log domains when plan/verification permits"),
         ConnectorStatus(name="Gravatar", configured=settings.enable_gravatar, category="Public identity", note="Public avatar presence"),
         ConnectorStatus(name="RDAP", configured=settings.enable_rdap, category="Infrastructure", note="Domain/IP registration data"),
         ConnectorStatus(name="Certificate Transparency", configured=settings.enable_crtsh, category="Infrastructure", note="crt.sh certificate names"),
-        ConnectorStatus(name="VirusTotal", configured=bool(settings.vt_api_key), category="Reputation", requires_key=True, note="Connector planned"),
-        ConnectorStatus(name="Shodan", configured=bool(settings.shodan_api_key), category="Infrastructure", requires_key=True, note="Connector planned"),
+        ConnectorStatus(name="urlscan.io", configured=settings.enable_urlscan, category="Public web scans", requires_key=False, note="Public historical URL/domain scans; API key increases quota"),
+        ConnectorStatus(name="VirusTotal", configured=bool(settings.vt_api_key), category="Reputation", requires_key=True, note="Domain/IP reputation and detections"),
+        ConnectorStatus(name="Shodan", configured=bool(settings.shodan_api_key), category="Infrastructure", requires_key=True, note="IP exposure and open services"),
     ]
 
 
@@ -160,3 +165,76 @@ def remove_monitored_identity(identity_id: str) -> None:
     from app.storage import delete_monitored_identity
     if not delete_monitored_identity(identity_id):
         raise HTTPException(status_code=404, detail="Monitored identity not found")
+
+
+def _flowsint_token() -> str:
+    integration = get_integration("flowsint") or {}
+    return str(integration.get("access_token") or settings.flowsint_api_token or "")
+
+
+@app.get("/api/integrations/flowsint")
+async def flowsint_integration_status() -> dict:
+    token = _flowsint_token()
+    if not token:
+        return {"connected": False, "sketch_id": settings.flowsint_sketch_id}
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{settings.flowsint_base_url.rstrip('/')}/api/auth/me", headers=headers)
+        if resp.status_code != 200:
+            return {"connected": False, "expired": True, "sketch_id": settings.flowsint_sketch_id}
+        user = resp.json()
+        return {"connected": True, "email": user.get("email"), "sketch_id": (get_integration("flowsint") or {}).get("sketch_id") or settings.flowsint_sketch_id}
+    except Exception as exc:
+        return {"connected": False, "error": str(exc), "sketch_id": settings.flowsint_sketch_id}
+
+
+@app.post("/api/integrations/flowsint/login")
+async def flowsint_integration_login(payload: dict) -> dict:
+    email = str(payload.get("email", "")).strip()
+    password = str(payload.get("password", ""))
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{settings.flowsint_base_url.rstrip('/')}/api/auth/token",
+                data={"username": email, "password": password},
+            )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Flowsint login failed")
+        body = resp.json()
+        token = body.get("access_token")
+        if not token:
+            raise HTTPException(status_code=502, detail="Flowsint did not return an access token")
+        set_integration("flowsint", {"access_token": token, "email": email, "sketch_id": settings.flowsint_sketch_id})
+        return {"connected": True, "email": email, "sketch_id": settings.flowsint_sketch_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Flowsint connection error: {exc}")
+
+
+@app.delete("/api/integrations/flowsint", status_code=204)
+def flowsint_integration_logout() -> None:
+    delete_integration("flowsint")
+
+
+@app.get("/api/integrations/flowsint/enrichers")
+async def flowsint_enrichers() -> list[dict]:
+    token = _flowsint_token()
+    if not token:
+        raise HTTPException(status_code=401, detail="Connect Flowsint first")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"{settings.flowsint_base_url.rstrip('/')}/api/enrichers", headers=headers)
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Flowsint session expired")
+        resp.raise_for_status()
+        data = resp.json()
+        return data if isinstance(data, list) else []
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Unable to list Flowsint enrichers: {exc}")

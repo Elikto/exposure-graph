@@ -42,6 +42,15 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS integrations (
+                provider TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
         conn.commit()
 
 
@@ -111,5 +120,36 @@ def add_monitored_identity(value: str, kind: str, label: str | None, owned: bool
 def delete_monitored_identity(identity_id: str) -> bool:
     with _connect() as conn:
         cur = conn.execute("DELETE FROM monitored_identities WHERE id = ?", (identity_id,))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def set_integration(provider: str, payload: dict) -> None:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    encoded = json.dumps(payload, ensure_ascii=False)
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO integrations (provider, payload, updated_at) VALUES (?, ?, ?)",
+            (provider, encoded, updated_at),
+        )
+        conn.commit()
+
+
+def get_integration(provider: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT payload, updated_at FROM integrations WHERE provider = ?",
+            (provider,),
+        ).fetchone()
+    if not row:
+        return None
+    payload = json.loads(row["payload"])
+    payload["updated_at"] = row["updated_at"]
+    return payload
+
+
+def delete_integration(provider: str) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM integrations WHERE provider = ?", (provider,))
         conn.commit()
     return cur.rowcount > 0

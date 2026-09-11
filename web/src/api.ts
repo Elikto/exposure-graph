@@ -49,3 +49,24 @@ export async function removeMonitoredIdentity(id: string): Promise<void> {
   const response = await fetch(`/api/monitored-identities/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
 }
+
+export function fetchFlowsintStatus() {
+  return json<import('./types').FlowsintStatus>('/api/integrations/flowsint')
+}
+
+export function loginFlowsint(email: string, password: string) {
+  return json<import('./types').FlowsintStatus>('/api/integrations/flowsint/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function logoutFlowsint(): Promise<void> {
+  const response = await fetch('/api/integrations/flowsint', { method: 'DELETE' })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+}
+
+export function fetchFlowsintEnrichers(): Promise<Array<Record<string, unknown>>> {
+  return json('/api/integrations/flowsint/enrichers')
+}

@@ -3,6 +3,7 @@ import httpx
 
 from app.config import settings
 from app.models import GraphEdge, GraphNode, SourceRun
+from app.storage import get_integration
 from .base import ConnectorResult
 
 
@@ -11,17 +12,17 @@ class FlowsintConnector:
 
     async def run(self, query: str, kind: str, root_id: str) -> ConnectorResult:
         started = time.perf_counter()
-        if not settings.flowsint_api_token or not settings.flowsint_sketch_id:
+        integration = get_integration("flowsint") or {}
+        token = integration.get("access_token") or settings.flowsint_api_token
+        sketch_id = integration.get("sketch_id") or settings.flowsint_sketch_id
+        if not token or not sketch_id:
             return ConnectorResult(run=SourceRun(
                 name=self.name,
                 status="needs_key",
-                message="FLOWSINT_API_TOKEN + FLOWSINT_SKETCH_ID required",
+                message="Connect Flowsint locally in ExposureGraph",
             ))
-        url = (
-            f"{settings.flowsint_base_url.rstrip('/')}/api/sketches/"
-            f"{settings.flowsint_sketch_id}/graph"
-        )
-        headers = {"Authorization": f"Bearer {settings.flowsint_api_token}"}
+        url = f"{settings.flowsint_base_url.rstrip('/')}/api/sketches/{sketch_id}/graph"
+        headers = {"Authorization": f"Bearer {token}"}
         try:
             async with httpx.AsyncClient(timeout=25) as client:
                 resp = await client.get(url, headers=headers)

@@ -15,10 +15,12 @@ class Settings(BaseSettings):
     hibp_api_key: str = ""
     vt_api_key: str = ""
     shodan_api_key: str = ""
+    urlscan_api_key: str = ""
 
     enable_gravatar: bool = True
     enable_rdap: bool = True
     enable_crtsh: bool = True
+    enable_urlscan: bool = True
 
     @property
     def db_path(self) -> Path:

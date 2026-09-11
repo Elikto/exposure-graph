@@ -74,3 +74,11 @@ export type MonitoredIdentity = {
   created_at: string
   enabled: boolean
 }
+
+export type FlowsintStatus = {
+  connected: boolean
+  email?: string
+  sketch_id?: string
+  expired?: boolean
+  error?: string
+}
