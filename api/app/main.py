@@ -18,6 +18,7 @@ from app.connectors.rdap import RDAPConnector
 from app.connectors.urlscan import URLScanConnector
 from app.connectors.virustotal import VirusTotalConnector
 from app.connectors.shodan import ShodanConnector
+from app.connectors.trestle import TrestleConnector
 
 app = FastAPI(title="ExposureGraph API", version="0.1.0")
 app.add_middleware(
@@ -28,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), FlowsintConnector()]
+CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), TrestleConnector(), FlowsintConnector()]
 
 
 REMOVAL_OVERRIDES = {
@@ -72,6 +73,7 @@ def connector_statuses() -> list[ConnectorStatus]:
         ConnectorStatus(name="urlscan.io", configured=settings.enable_urlscan, category="Public web scans", requires_key=False, note="Public historical URL/domain scans; API key increases quota"),
         ConnectorStatus(name="VirusTotal", configured=bool((get_integration("threat_intel") or {}).get("vt_api_key") or settings.vt_api_key), category="Reputation", requires_key=True, note="Domain/IP reputation and detections"),
         ConnectorStatus(name="Shodan", configured=True, category="Infrastructure", requires_key=False, note="Shodan InternetDB active; optional API key unlocks the full Shodan host API"),
+        ConnectorStatus(name="Trestle Identity", configured=bool((get_integration("identity_osint") or {}).get("trestle_api_key")), category="Identity enrichment", requires_key=True, note="Authorized reverse-phone identity: owner, addresses and associated emails when coverage permits"),
     ]
 
 
@@ -93,6 +95,20 @@ def configure_threat_intel(payload: dict) -> dict:
     shodan = str(payload.get("shodan_api_key") or current.get("shodan_api_key") or "").strip()
     set_integration("threat_intel", {"vt_api_key": vt, "shodan_api_key": shodan})
     return {"virustotal": bool(vt), "shodan": bool(shodan)}
+
+
+@app.get("/api/integrations/identity-osint")
+def identity_osint_status() -> dict:
+    saved = get_integration("identity_osint") or {}
+    return {"trestle": bool(saved.get("trestle_api_key"))}
+
+
+@app.post("/api/integrations/identity-osint")
+def configure_identity_osint(payload: dict) -> dict:
+    current = get_integration("identity_osint") or {}
+    trestle = str(payload.get("trestle_api_key") or current.get("trestle_api_key") or "").strip()
+    set_integration("identity_osint", {"trestle_api_key": trestle})
+    return {"trestle": bool(trestle)}
 
 
 @app.post("/api/removal-links")

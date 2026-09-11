@@ -1,10 +1,27 @@
+import asyncio
 import time
+import uuid
 import httpx
 
 from app.config import settings
 from app.models import GraphEdge, GraphNode, SourceRun
 from app.storage import get_integration
 from .base import ConnectorResult
+
+
+def _phone_key(value: object) -> str:
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
+def _flowsint_parts(data: object) -> tuple[list[dict], list[dict]]:
+    if not isinstance(data, dict):
+        return [], []
+    nodes = data.get("nodes", data.get("nds", [])) or []
+    edges = data.get("edges", data.get("links", data.get("rls", []))) or []
+    return nodes, edges
 
 
 class FlowsintConnector:
@@ -24,12 +41,55 @@ class FlowsintConnector:
         url = f"{settings.flowsint_base_url.rstrip('/')}/api/sketches/{sketch_id}/graph"
         headers = {"Authorization": f"Bearer {token}"}
         try:
+            launched: list[str] = []
             async with httpx.AsyncClient(timeout=25) as client:
                 resp = await client.get(url, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            raw_nodes = data.get("nodes", data.get("nds", [])) if isinstance(data, dict) else []
-            raw_edges = data.get("edges", data.get("links", data.get("rls", []))) if isinstance(data, dict) else []
+                resp.raise_for_status()
+                data = resp.json()
+                raw_nodes, raw_edges = _flowsint_parts(data)
+
+                if kind == "phone":
+                    phone_key = _phone_key(query)
+                    phone_ids = []
+                    for item in raw_nodes:
+                        props = item.get("nodeProperties") or item.get("properties") or {}
+                        node_type = str(item.get("nodeType") or item.get("type") or "").lower()
+                        label = item.get("nodeLabel") or item.get("label") or ""
+                        if node_type == "phone" and phone_key and phone_key in {_phone_key(label), _phone_key(props.get("number"))}:
+                            node_id = str(item.get("id") or item.get("elementId") or "")
+                            if node_id:
+                                phone_ids.append(node_id)
+
+                    if not phone_ids:
+                        create_payload = {
+                            "id": f"exposuregraph-{uuid.uuid4()}",
+                            "nodeType": "phone", "nodeLabel": query,
+                            "nodeProperties": {"number": query}, "nodeMetadata": {},
+                            "x": 100.0, "y": 100.0, "nodeSize": 4, "nodeShape": "circle",
+                            "nodeColor": None, "nodeFlag": None, "nodeIcon": None, "nodeImage": None,
+                        }
+                        created = await client.post(f"{settings.flowsint_base_url.rstrip('/')}/api/sketches/{sketch_id}/nodes/add", headers=headers, json=create_payload)
+                        created.raise_for_status()
+                        body = created.json()
+                        created_node = body.get("node", body) if isinstance(body, dict) else {}
+                        node_id = str(created_node.get("id") or "")
+                        if node_id:
+                            phone_ids = [node_id]
+
+                    for enricher in ("phone_to_device_hudsonrock", "phone_to_carrier"):
+                        if not phone_ids:
+                            break
+                        launch = await client.post(f"{settings.flowsint_base_url.rstrip('/')}/api/enrichers/{enricher}/launch", headers=headers, json={"node_ids": phone_ids[:5], "sketch_id": sketch_id})
+                        if launch.status_code < 400:
+                            launched.append(enricher)
+
+                    if launched:
+                        for _ in range(5):
+                            await asyncio.sleep(1.0)
+                            refreshed = await client.get(url, headers=headers)
+                            if refreshed.status_code == 200:
+                                data = refreshed.json()
+                                raw_nodes, raw_edges = _flowsint_parts(data)
             nodes: list[GraphNode] = []
             edges: list[GraphEdge] = []
             id_map: set[str] = set()
@@ -44,7 +104,10 @@ class FlowsintConnector:
                 label = str(item.get("nodeLabel") or item.get("label") or node_id)
                 node_type = str(item.get("nodeType") or item.get("type") or "flowsint")
                 haystack = f"{label} {props}".lower()
-                if query_l in haystack:
+                if kind == "phone":
+                    if node_type.lower() == "phone" and _phone_key(query) in {_phone_key(label), _phone_key(props.get("number"))}:
+                        matched_ids.append(node_id)
+                elif query_l in haystack:
                     matched_ids.append(node_id)
                 nodes.append(GraphNode(
                     id=f"flowsint:{node_id}",
@@ -114,7 +177,7 @@ class FlowsintConnector:
                 run=SourceRun(
                     name=self.name,
                     status="ok",
-                    message=f"{len(nodes)} nodes, {len(matched_ids)} direct match(es)",
+                    message=f"{len(nodes)} nodes, {len(matched_ids)} direct match(es)" + (f"; launched {len(launched)} phone enricher(s)" if launched else ""),
                     duration_ms=elapsed,
                 ),
             )
