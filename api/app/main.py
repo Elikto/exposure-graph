@@ -70,11 +70,29 @@ def connector_statuses() -> list[ConnectorStatus]:
         ConnectorStatus(name="RDAP", configured=settings.enable_rdap, category="Infrastructure", note="Domain/IP registration data"),
         ConnectorStatus(name="Certificate Transparency", configured=settings.enable_crtsh, category="Infrastructure", note="crt.sh certificate names"),
         ConnectorStatus(name="urlscan.io", configured=settings.enable_urlscan, category="Public web scans", requires_key=False, note="Public historical URL/domain scans; API key increases quota"),
-        ConnectorStatus(name="VirusTotal", configured=bool(settings.vt_api_key), category="Reputation", requires_key=True, note="Domain/IP reputation and detections"),
-        ConnectorStatus(name="Shodan", configured=bool(settings.shodan_api_key), category="Infrastructure", requires_key=True, note="IP exposure and open services"),
+        ConnectorStatus(name="VirusTotal", configured=bool((get_integration("threat_intel") or {}).get("vt_api_key") or settings.vt_api_key), category="Reputation", requires_key=True, note="Domain/IP reputation and detections"),
+        ConnectorStatus(name="Shodan", configured=True, category="Infrastructure", requires_key=False, note="Shodan InternetDB active; optional API key unlocks the full Shodan host API"),
     ]
 
 
+
+
+@app.get("/api/integrations/threat-intel")
+def threat_intel_status() -> dict:
+    saved = get_integration("threat_intel") or {}
+    return {
+        "virustotal": bool(saved.get("vt_api_key") or settings.vt_api_key),
+        "shodan": bool(saved.get("shodan_api_key") or settings.shodan_api_key),
+    }
+
+
+@app.post("/api/integrations/threat-intel")
+def configure_threat_intel(payload: dict) -> dict:
+    current = get_integration("threat_intel") or {}
+    vt = str(payload.get("vt_api_key") or current.get("vt_api_key") or "").strip()
+    shodan = str(payload.get("shodan_api_key") or current.get("shodan_api_key") or "").strip()
+    set_integration("threat_intel", {"vt_api_key": vt, "shodan_api_key": shodan})
+    return {"virustotal": bool(vt), "shodan": bool(shodan)}
 
 
 @app.post("/api/removal-links")

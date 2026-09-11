@@ -3,7 +3,7 @@ import {
   AlertTriangle, Database, ExternalLink, History, Link2, Loader2, Network,
   Search, ShieldCheck, Sparkles, Trash2, UserRound
 } from 'lucide-react'
-import { addMonitoredIdentity, fetchConnectors, fetchFlowsintStatus, fetchMonitoredIdentities, fetchRemovalLinks, fetchSearch, fetchSearches, loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch } from './api'
+import { addMonitoredIdentity, fetchConnectors, fetchFlowsintStatus, fetchMonitoredIdentities, fetchRemovalLinks, fetchSearch, fetchSearches, fetchThreatIntelStatus, loginFlowsint, logoutFlowsint, removeMonitoredIdentity, runSearch, saveThreatIntelKeys } from './api'
 import { GraphView } from './components/GraphView'
 import type { ConnectorStatus, FlowsintStatus, MonitoredIdentity, RemovalLink, SearchResponse, SelectedItem } from './types'
 import './styles.css'
@@ -71,6 +71,10 @@ export default function App() {
   const [flowsintPassword, setFlowsintPassword] = useState('')
   const [flowsintBusy, setFlowsintBusy] = useState(false)
   const [removalLinks, setRemovalLinks] = useState<Record<string, RemovalLink>>({})
+  const [intelStatus, setIntelStatus] = useState({ virustotal: false, shodan: false })
+  const [vtKey, setVtKey] = useState('')
+  const [shodanKey, setShodanKey] = useState('')
+  const [intelBusy, setIntelBusy] = useState(false)
 
   const refreshMeta = useCallback(async () => {
     const [connectorData, historyData] = await Promise.all([
@@ -85,6 +89,7 @@ export default function App() {
     refreshMeta()
     fetchMonitoredIdentities().then(setMonitored).catch(() => setMonitored([]))
     fetchFlowsintStatus().then(setFlowsintStatus).catch(() => setFlowsintStatus({ connected: false }))
+    fetchThreatIntelStatus().then(setIntelStatus).catch(() => setIntelStatus({ virustotal: false, shodan: false }))
   }, [refreshMeta])
 
   useEffect(() => {
@@ -137,6 +142,22 @@ export default function App() {
     await logoutFlowsint()
     setFlowsintStatus({ connected: false })
     await refreshMeta()
+  }
+
+  async function saveIntelKeys() {
+    setIntelBusy(true)
+    setError('')
+    try {
+      const status = await saveThreatIntelKeys(vtKey.trim(), shodanKey.trim())
+      setIntelStatus(status)
+      setVtKey('')
+      setShodanKey('')
+      await refreshMeta()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save API keys')
+    } finally {
+      setIntelBusy(false)
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -231,8 +252,17 @@ export default function App() {
       if (['gravatar', 'socialaccount'].includes(type))
         asText(p.avatarUrl || p.src || p.profile_picture_url).forEach((v) => avatars.add(v))
     }
+    const identityLabel = ({
+      email: 'Email', phone: 'Phone', username: 'Username', domain: 'Domain',
+      ip: 'IP address', person: 'Person', address: 'Postal address'
+    } as Record<string, string>)[result.kind] || 'Search identifier'
+    const linkedEmails = new Set<string>()
+    for (const node of result.nodes) {
+      if (node.type.toLowerCase() === 'email' && node.label.toLowerCase() !== result.query.toLowerCase()) linkedEmails.add(node.label)
+    }
     return [
-      { label: 'Email', values: [result.query], state: 'confirmed' },
+      { label: identityLabel, values: [result.query], state: 'confirmed' },
+      ...(result.kind !== 'email' ? [{ label: 'Linked email', values: [...linkedEmails], state: linkedEmails.size ? 'found' : 'none' }] : []),
       { label: 'Name / display name', values: [...displayNames], state: displayNames.size ? 'found' : 'none' },
       { label: 'Full name', values: [...fullNames], state: fullNames.size ? 'found' : 'none' },
       { label: 'Username', values: [...usernames], state: usernames.size ? 'found' : 'none' },
@@ -299,6 +329,28 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="side-section intel-section">
+            <div className="section-title"><ShieldCheck size={15} /> Threat intelligence</div>
+            <div className="intel-status-row">
+              <span className={intelStatus.virustotal ? 'intel-on' : ''}>VirusTotal</span>
+              <span className={intelStatus.shodan ? 'intel-on' : ''}>Shodan</span>
+            </div>
+            <input type="password" value={vtKey} onChange={(e) => setVtKey(e.target.value)} placeholder="VirusTotal API key" />
+            <input type="password" value={shodanKey} onChange={(e) => setShodanKey(e.target.value)} placeholder="Shodan API key" />
+            <button type="button" onClick={saveIntelKeys} disabled={intelBusy || (!vtKey.trim() && !shodanKey.trim())}>
+              {intelBusy ? 'Saving…' : 'Connect intelligence sources'}
+            </button>
+            <small>Keys stay in the local ExposureGraph database and are never returned to the browser after saving.</small>
+          </section>
+
+          <section className="side-section watch-services">
+            <div className="section-title"><ShieldCheck size={15} /> External monitors</div>
+            <a href="https://my.nordaccount.com/" target="_blank" rel="noreferrer">NordVPN Dark Web Monitor <ExternalLink size={12} /></a>
+            <a href="https://pass.proton.me/" target="_blank" rel="noreferrer">Proton Pass Monitor <ExternalLink size={12} /></a>
+            <a href="https://central.bitdefender.com/" target="_blank" rel="noreferrer">Bitdefender Digital Identity <ExternalLink size={12} /></a>
+            <small>These services do not expose a supported public API for importing your personal alerts, so ExposureGraph links to their dashboards instead of scraping sessions or cookies.</small>
           </section>
 
           <section className="side-section flowsint-section">

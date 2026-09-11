@@ -77,4 +77,14 @@ export function fetchRemovalLinks(domains: string[]): Promise<RemovalLink[]> {
     body: JSON.stringify({ domains }),
   })
 }
+export function fetchThreatIntelStatus(): Promise<{virustotal:boolean; shodan:boolean}> {
+  return json('/api/integrations/threat-intel')
+}
+
+export function saveThreatIntelKeys(vt_api_key: string, shodan_api_key: string): Promise<{virustotal:boolean; shodan:boolean}> {
+  return json('/api/integrations/threat-intel', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vt_api_key, shodan_api_key }),
+  })
+}
 
