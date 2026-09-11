@@ -31,6 +31,26 @@ app.add_middleware(
 CONNECTORS = [HIBPConnector(), GravatarConnector(), RDAPConnector(), CRTSHConnector(), URLScanConnector(), VirusTotalConnector(), ShodanConnector(), FlowsintConnector()]
 
 
+REMOVAL_OVERRIDES = {
+    "reddit.com": ("Reddit", "https://support.reddithelp.com/hc/en-us/articles/204579509-How-do-I-delete-my-account", "medium"),
+    "tiktok.com": ("TikTok", "https://support.tiktok.com/en/account-and-privacy/manage-account/delete-account", "medium"),
+    "twitch.tv": ("Twitch", "https://help.twitch.tv/s/article/delete-twitch-account", "medium"),
+    "twitchtracker.com": ("Twitch", "https://help.twitch.tv/s/article/delete-twitch-account", "medium"),
+    "discord.com": ("Discord", "https://support.discord.com/hc/fr/articles/212500837-Comment-supprimer-votre-compte-Discord", "medium"),
+    "discords.com": ("Discord", "https://support.discord.com/hc/fr/articles/212500837-Comment-supprimer-votre-compte-Discord", "medium"),
+    "wordpress.com": ("WordPress.com", "https://wordpress.com/fr/support/fermer-compte/", "medium"),
+    "vimeo.com": ("Vimeo", "https://help.vimeo.com/hc/fr/articles/12425669379601-Comment-supprimer-mon-compte", "easy"),
+    "paypal.com": ("PayPal", "https://www.paypal.com/fr/cshelp/article/comment-fermer-mon-compte-paypal%C2%A0-help247", "medium"),
+    "apple.com": ("Apple", "https://privacy.apple.com/", "medium"),
+}
+
+
+def _domain_matches(host: str, candidate: str) -> bool:
+    host = host.lower().split(":")[0].strip(".")
+    candidate = candidate.lower().split(":")[0].strip(".")
+    return host == candidate or host.endswith("." + candidate) or candidate.endswith("." + host)
+
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
@@ -54,6 +74,37 @@ def connector_statuses() -> list[ConnectorStatus]:
         ConnectorStatus(name="Shodan", configured=bool(settings.shodan_api_key), category="Infrastructure", requires_key=True, note="IP exposure and open services"),
     ]
 
+
+
+
+@app.post("/api/removal-links")
+async def removal_links(payload: dict) -> list[dict]:
+    domains = [str(d).strip().lower() for d in payload.get("domains", []) if str(d).strip()][:250]
+    catalog: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            resp = await client.get("https://raw.githubusercontent.com/justdeleteme/justdelete.me/master/sites.json")
+        if resp.status_code == 200:
+            raw = resp.json()
+            if isinstance(raw, list):
+                catalog = [item for item in raw if isinstance(item, dict)]
+    except Exception:
+        catalog = []
+    results = []
+    for domain in domains:
+        found = None
+        for key, (name, url, difficulty) in REMOVAL_OVERRIDES.items():
+            if _domain_matches(domain, key):
+                found = {"domain": domain, "name": name, "url": url, "difficulty": difficulty, "source": "official/current"}
+                break
+        if not found:
+            for item in catalog:
+                item_domains = item.get("domains") or []
+                if any(_domain_matches(domain, str(candidate)) for candidate in item_domains):
+                    found = {"domain": domain, "name": item.get("name") or domain, "url": item.get("url"), "difficulty": item.get("difficulty") or "unknown", "notes": item.get("notes_fr") or item.get("notes"), "source": "JustDeleteMe"}
+                    break
+        results.append(found or {"domain": domain, "name": domain, "url": None, "difficulty": "unknown", "source": "not_catalogued"})
+    return results
 
 @app.get("/api/searches")
 def searches() -> list[dict]:

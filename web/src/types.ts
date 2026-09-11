@@ -82,3 +82,12 @@ export type FlowsintStatus = {
   expired?: boolean
   error?: string
 }
+export type RemovalLink = {
+  domain: string
+  name: string
+  url?: string | null
+  difficulty: string
+  notes?: string | null
+  source: string
+}
+

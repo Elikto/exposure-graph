@@ -1,4 +1,4 @@
-﻿import type { ConnectorStatus, MonitoredIdentity, SearchResponse } from './types'
+import type { ConnectorStatus, MonitoredIdentity, RemovalLink, SearchResponse } from './types'
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
@@ -70,3 +70,11 @@ export async function logoutFlowsint(): Promise<void> {
 export function fetchFlowsintEnrichers(): Promise<Array<Record<string, unknown>>> {
   return json('/api/integrations/flowsint/enrichers')
 }
+export function fetchRemovalLinks(domains: string[]): Promise<RemovalLink[]> {
+  return json('/api/removal-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domains }),
+  })
+}
+

@@ -32,3 +32,10 @@ docker compose up -d --build
 ```
 
 Open `http://localhost:5180`. Add the identifiers you own, then connect the local Flowsint instance from the **Flowsint bridge** panel to unlock its installed enrichers without putting your password in Git or chat.
+
+## Privacy cleanup
+
+- The right-hand panel summarizes personal attributes actually returned by configured sources (display name, username, phone, postal address/location and public avatars).
+- Detected profile sites are listed next to the graph with clickable profile links.
+- Removal actions prefer current official account/privacy pages for major services, then the open-source JustDeleteMe directory; uncatalogued sites get an independent privacy-request fallback.
+- Username-only matches remain candidates and must not be treated as confirmed account ownership without corroborating evidence.
