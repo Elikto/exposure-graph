@@ -1,0 +1,250 @@
+html, body, #root, .eg2-shell { min-width: 0; max-width: 100%; }
+
+.eg2-mobile-actions,
+.eg2-mobile-panel-head,
+.eg2-mobile-backdrop {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .eg2-workspace {
+    grid-template-columns: 250px minmax(0, 1fr) 315px;
+    gap: 8px;
+    padding: 8px;
+  }
+  .eg2-graph-head { padding-inline: 12px; }
+  .eg2-tab-content { padding: 11px; }
+}
+
+@media (min-width: 901px) and (max-width: 1050px) {
+  html, body, #root { min-width: 0; }
+  .eg2-workspace {
+    grid-template-columns: 245px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 300px;
+  }
+  .eg2-left { grid-column: 1; grid-row: 1; }
+  .eg2-center { grid-column: 2; grid-row: 1 / 3; }
+  .eg2-right {
+    position: static;
+    grid-column: 1;
+    grid-row: 2;
+    inset: auto;
+    width: auto;
+    min-width: 0;
+    box-shadow: 0 18px 60px #0009;
+  }
+  .eg2-tabs { height: 46px; }
+  .eg2-tabs button { font-size: 8px; }
+  .eg2-right-scroll { min-height: 0; }
+}
+
+@media (max-width: 900px) {
+  html, body, #root {
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .eg2-shell {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+  .eg2-topbar {
+    height: 56px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+  .eg2-logo { width: 34px; height: 34px; border-radius: 11px; }
+  .eg2-brand { min-width: 0; gap: 8px; }
+  .eg2-brand b { font-size: 14px; }
+  .eg2-brand small { display: none; }
+  .eg2-top-status { display: none; }
+  .eg2-mobile-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .eg2-mobile-actions button {
+    min-height: 40px;
+    border: 1px solid #263449;
+    border-radius: 10px;
+    background: #111925;
+    color: #dbe7f5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 10px;
+    cursor: pointer;
+  }
+  .eg2-mobile-actions span { font-size: 10px; font-weight: 700; }
+  .eg2-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 56px 0 0;
+    z-index: 24;
+    border: 0;
+    background: #02050aa8;
+    backdrop-filter: blur(3px);
+  }
+  .eg2-workspace {
+    height: calc(100dvh - 56px);
+    display: block;
+    padding: 8px;
+    overflow: hidden;
+  }
+  .eg2-center {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 16px;
+  }
+  .eg2-left,
+  .eg2-right {
+    position: fixed;
+    top: 56px;
+    bottom: 0;
+    z-index: 30;
+    width: min(88vw, 380px);
+    max-width: 100%;
+    background: #090e17;
+    border-radius: 0;
+    box-shadow: 0 24px 90px #000d;
+    transition: transform .22s ease;
+  }
+  .eg2-left {
+    left: 0;
+    right: auto;
+    transform: translateX(-105%);
+    border-right: 1px solid #ffffff12;
+  }
+  .eg2-right {
+    left: auto;
+    right: 0;
+    transform: translateX(105%);
+    border-left: 1px solid #ffffff12;
+  }
+  .eg2-left.mobile-open,
+  .eg2-right.mobile-open { transform: translateX(0); }
+  .eg2-mobile-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 0 12px;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: #0b111bee;
+    border-bottom: 1px solid #ffffff0d;
+    backdrop-filter: blur(18px);
+  }
+  .eg2-mobile-panel-head b { font-size: 11px; }
+  .eg2-mobile-panel-head button {
+    width: 38px;
+    height: 38px;
+    border: 1px solid #263449;
+    border-radius: 10px;
+    background: #111925;
+    color: #dce6f3;
+    display: grid;
+    place-items: center;
+  }
+  .eg2-right { display: flex; flex-direction: column; overflow: hidden; }
+  .eg2-right-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  .eg2-search { padding: 14px; }
+  .eg2-searchbox input,
+  .eg2-search select,
+  .eg2-form-stack input,
+  .eg2-inline input { font-size: 16px; }
+  .eg2-searchbox input { height: 46px; }
+  .eg2-search select,
+  .eg2-form-stack input,
+  .eg2-inline input { min-height: 44px; }
+  .eg2-menu > summary { min-height: 46px; }
+  .eg2-form-stack button,
+  .eg2-inline button { min-height: 42px; }
+  .eg2-graph-head {
+    height: auto;
+    min-height: 88px;
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 8px;
+  }
+  .eg2-graph-head h1 { font-size: 13px; }
+  .eg2-stats {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .eg2-stats::-webkit-scrollbar { display: none; }
+  .eg2-stats span { flex: 0 0 auto; }
+  .eg2-graph { min-height: 0; }
+  .graph-canvas-v2 { min-height: 240px; }
+  .graph-hint-v2 {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    max-width: calc(100% - 16px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .eg2-warning {
+    max-height: 72px;
+    overflow-y: auto;
+    align-items: flex-start;
+  }
+  .eg2-tabs {
+    flex: 0 0 52px;
+    height: 52px;
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .eg2-tab-content { padding: 12px; }
+  .eg2-selected-site { grid-template-columns: auto 1fr; }
+  .eg2-selected-site > a {
+    grid-column: 1 / -1;
+    justify-content: center;
+    min-height: 38px;
+  }
+  .eg2-site-card > header > span { flex: 0 0 auto; }
+}
+
+@media (max-width: 520px) {
+  .eg2-topbar { padding-inline: 8px; }
+  .eg2-mobile-actions button {
+    width: 40px;
+    padding: 0;
+  }
+  .eg2-mobile-actions span { display: none; }
+  .eg2-workspace { padding: 6px; }
+  .eg2-center { border-radius: 14px; }
+  .eg2-left,
+  .eg2-right { width: min(94vw, 380px); }
+  .eg2-tabs { gap: 3px; padding: 5px; }
+  .eg2-tabs button { font-size: 8px; gap: 3px; }
+  .eg2-tabs button b { display: none; }
+  .eg2-section-head { margin-bottom: 10px; }
+  .eg2-section-head h2 { font-size: 13px; }
+  .eg2-site-grid { grid-template-columns: 1fr; }
+  .eg2-card-actions a { min-height: 38px; align-items: center; }
+  .eg2-empty { padding: 16px; }
+  .eg2-empty > div { width: 70px; height: 70px; }
+  .eg2-empty h2 { font-size: 16px; }
+  .eg2-empty p { font-size: 10px; }
+}
+
+@media (max-width: 380px) {
+  .eg2-brand b { font-size: 13px; }
+  .eg2-logo { width: 32px; height: 32px; }
+  .eg2-mobile-actions button { width: 38px; min-height: 38px; }
+  .eg2-graph-head { min-height: 82px; padding: 8px 10px; }
+  .eg2-stats span { padding: 4px 6px; }
+}

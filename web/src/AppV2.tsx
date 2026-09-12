@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, AtSign, CalendarDays, ChevronRight, Database, ExternalLink, Globe2,
-  History, KeyRound, Link2, Loader2, Network, Search, ShieldCheck, Trash2, UserRound
+  History, KeyRound, Link2, Loader2, Menu, Network, PanelRightOpen, Search, ShieldCheck, Trash2, UserRound, X
 } from 'lucide-react'
 import {
   addMonitoredIdentity, fetchConnectors, fetchEmailOsintStatus, fetchFlowsintStatus, fetchIdentityOsintStatus,
@@ -12,6 +12,7 @@ import {
 import { GraphViewV2 } from './components/GraphViewV2'
 import type { ConnectorStatus, FlowsintStatus, GraphNode, MonitoredIdentity, RemovalLink, SearchResponse, SelectedItem } from './types'
 import './dark-v2.css'
+import './responsive.css'
 
 const kinds = [
   ['auto', 'Détection automatique'], ['email', 'E-mail'], ['phone', 'Téléphone'],
@@ -88,6 +89,7 @@ export default function AppV2() {
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [selected, setSelected] = useState<SelectedItem>(null)
   const [rightTab, setRightTab] = useState<RightTab>('sites')
+  const [mobilePanel, setMobilePanel] = useState<'left'|'right'|null>(null)
   const [connectors, setConnectors] = useState<ConnectorStatus[]>([])
   const [history, setHistory] = useState<Array<{id:string; created_at:string; query:string; kind:string}>>([])
   const [loading, setLoading] = useState(false)
@@ -180,13 +182,13 @@ export default function AppV2() {
     try {
       // Personal searches remain restricted server-side; the UI no longer asks for a repetitive checkbox.
       const data = await runSearch(query.trim(), kind, true)
-      setResult(data); setSelected(null); setRightTab('sites'); await refresh()
+      setResult(data); setSelected(null); setRightTab('sites'); setMobilePanel(null); await refresh()
     } catch (err) { setError(err instanceof Error ? err.message : 'Recherche impossible') }
     finally { setLoading(false) }
   }
   async function openHistory(id:string) {
     setLoading(true); setError('')
-    try { const data = await fetchSearch(id); setResult(data); setQuery(data.query); setKind(data.kind); setSelected(null); setRightTab('sites') }
+    try { const data = await fetchSearch(id); setResult(data); setQuery(data.query); setKind(data.kind); setSelected(null); setRightTab('sites'); setMobilePanel(null) }
     catch (err) { setError(err instanceof Error ? err.message : 'Impossible de charger la recherche') }
     finally { setLoading(false) }
   }
@@ -194,6 +196,7 @@ export default function AppV2() {
     setSelected(item)
     if (item?.kind === 'node' && nodeUrl(item.data)) setRightTab('sites')
     else if (item) setRightTab('inspect')
+    if (item && window.matchMedia('(max-width: 900px)').matches) setMobilePanel('right')
   }
   async function connectFlowsint() {
     if (!flowsintEmail.trim() || !flowsintPassword) return
@@ -239,10 +242,13 @@ export default function AppV2() {
     <header className="eg2-topbar">
       <div className="eg2-brand"><span className="eg2-logo"><Network size={19}/></span><div><b>ExposureGraph</b><small>OSINT exposure intelligence</small></div></div>
       <div className="eg2-top-status"><span><i className="dot green"/> {configured}/{connectors.length} sources</span><span><ShieldCheck size={14}/> accès protégé</span></div>
+      <div className="eg2-mobile-actions"><button type="button" aria-label="Ouvrir la recherche" onClick={()=>setMobilePanel(mobilePanel==='left'?null:'left')}><Menu size={18}/><span>Recherche</span></button><button type="button" aria-label="Ouvrir les resultats" onClick={()=>setMobilePanel(mobilePanel==='right'?null:'right')}><PanelRightOpen size={18}/><span>Resultats</span></button></div>
     </header>
 
+    {mobilePanel&&<button className="eg2-mobile-backdrop" aria-label="Fermer le panneau" onClick={()=>setMobilePanel(null)}/>}
     <main className="eg2-workspace">
-      <aside className="eg2-left eg2-panel eg2-scroll">
+      <aside className={`eg2-left eg2-panel eg2-scroll ${mobilePanel==='left'?'mobile-open':''}`}>
+        <div className="eg2-mobile-panel-head"><b>Recherche & reglages</b><button type="button" onClick={()=>setMobilePanel(null)} aria-label="Fermer"><X size={18}/></button></div>
         <form className="eg2-search" onSubmit={submit}>
           <div className="eg2-kicker">Nouvelle recherche</div>
           <div className="eg2-searchbox"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="e-mail, téléphone, pseudo, domaine, IP…" autoComplete="off"/></div>
@@ -283,7 +289,8 @@ export default function AppV2() {
         {!!result?.warnings.length&&<div className="eg2-warning"><AlertTriangle size={14}/>{result.warnings.join(' · ')}</div>}
       </section>
 
-      <aside className="eg2-right eg2-panel">
+      <aside className={`eg2-right eg2-panel ${mobilePanel==='right'?'mobile-open':''}`}>
+        <div className="eg2-mobile-panel-head"><b>RÃ©sultats & dÃ©tails</b><button type="button" onClick={()=>setMobilePanel(null)} aria-label="Fermer"><X size={18}/></button></div>
         <nav className="eg2-tabs"><button className={rightTab==='sites'?'active':''} onClick={()=>setRightTab('sites')}><Globe2 size={14}/> Présence web <b>{siteAppearances.length}</b></button><button className={rightTab==='inspect'?'active':''} onClick={()=>setRightTab('inspect')}><Link2 size={14}/> Inspecteur</button><button className={rightTab==='exposure'?'active':''} onClick={()=>setRightTab('exposure')}><AlertTriangle size={14}/> Expositions</button></nav>
         <div className="eg2-right-scroll eg2-scroll">
           {rightTab==='sites'&&<section className="eg2-tab-content">
