@@ -21,6 +21,12 @@ type Props = { nodes: GraphNode[]; edges: GraphEdge[]; onSelect: (item: Selected
 export function GraphViewV2({ nodes, edges, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
+  const onSelectRef = useRef(onSelect)
+
+  useEffect(() => {
+    onSelectRef.current = onSelect
+  }, [onSelect])
+
   const elements = useMemo(() => [
     ...nodes.map((node) => ({ data: { id: node.id, label: node.label, nodeType: node.type, color: colorFor(node.type), size: sizeFor(node), original: node } })),
     ...edges.map((edge) => ({ data: { id: edge.id, source: edge.source, target: edge.target, label: edge.label, original: edge } })),
@@ -61,16 +67,16 @@ export function GraphViewV2({ nodes, edges, onSelect }: Props) {
       layout: { name: 'cose', animate: false, fit: true, padding: 56, nodeRepulsion: () => 200000, idealEdgeLength: () => 155, edgeElasticity: () => 80, gravity: .35, numIter: 1200 },
     })
 
-    cy.on('tap', 'node', (event) => onSelect({ kind: 'node', data: event.target.data('original') as GraphNode }))
-    cy.on('tap', 'edge', (event) => onSelect({ kind: 'edge', data: event.target.data('original') as GraphEdge }))
-    cy.on('tap', (event) => { if (event.target === cy) onSelect(null) })
+    cy.on('tap', 'node', (event) => onSelectRef.current({ kind: 'node', data: event.target.data('original') as GraphNode }))
+    cy.on('tap', 'edge', (event) => onSelectRef.current({ kind: 'edge', data: event.target.data('original') as GraphEdge }))
+    cy.on('tap', (event) => { if (event.target === cy) onSelectRef.current(null) })
     const observer = new ResizeObserver(() => cy.resize())
     observer.observe(containerRef.current)
     cy.one('layoutstop', () => { cy.resize(); cy.fit(cy.elements(), 60) })
     requestAnimationFrame(() => { cy.resize(); cy.fit(cy.elements(), 60) })
     cyRef.current = cy
     return () => { observer.disconnect(); cy.destroy(); cyRef.current = null }
-  }, [elements, onSelect])
+  }, [elements])
 
   return <div className="graph-shell-v2"><div ref={containerRef} className="graph-canvas-v2" /><div className="graph-hint-v2">Cliquer sur un nœud pour ouvrir sa fiche · molette = zoom · glisser = déplacer</div></div>
 }
