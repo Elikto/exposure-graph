@@ -13,16 +13,26 @@ export function fetchConnectors(): Promise<ConnectorStatus[]> {
   return json('/api/connectors')
 }
 
-export function runSearch(query: string, kind = 'auto', owned = true): Promise<SearchResponse> {
-  return json('/api/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query,
-      kind,
-      owned_or_authorized: owned,
-    }),
-  })
+export async function runSearch(query: string, kind = 'auto', owned = true): Promise<SearchResponse> {
+  const mode = (window as any).__exposureScanMode === 'full' ? 'full' : 'fast'
+  const estimateSeconds = mode === 'full' ? 34 : 10
+  window.dispatchEvent(new CustomEvent('exposure:scan-start', { detail: { mode, estimateSeconds } }))
+  try {
+    const result = await json<SearchResponse>(mode === 'fast' ? '/api/search/fast' : '/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        kind,
+        owned_or_authorized: owned,
+      }),
+    })
+    window.dispatchEvent(new CustomEvent('exposure:scan-end', { detail: { mode, ok: true } }))
+    return result
+  } catch (error) {
+    window.dispatchEvent(new CustomEvent('exposure:scan-end', { detail: { mode, ok: false } }))
+    throw error
+  }
 }
 
 export function fetchSearches(): Promise<Array<{id: string; created_at: string; query: string; kind: string}>> {
@@ -87,7 +97,6 @@ export function saveThreatIntelKeys(vt_api_key: string, shodan_api_key: string):
     body: JSON.stringify({ vt_api_key, shodan_api_key }),
   })
 }
-
 
 export function fetchIdentityOsintStatus(): Promise<{trestle:boolean; pdl:boolean}> {
   return json('/api/integrations/identity-osint')
