@@ -30,8 +30,10 @@ class MaigretPublicConnector:
             if not db_path.exists():
                 raise RuntimeError("Maigret site database unavailable")
             db = MaigretDatabase().load_from_path(str(db_path))
+            # Fast default: search the most relevant public sites first. This keeps
+            # interactive scans responsive while still covering the main platforms.
             sites = db.ranked_sites_dict(
-                top=500,
+                top=120,
                 disabled=False,
                 id_type="username",
             )
@@ -43,15 +45,15 @@ class MaigretPublicConnector:
                     username=username,
                     site_dict=dict(sites),
                     logger=logger,
-                    timeout=4,
+                    timeout=3,
                     is_parsing_enabled=True,
                     is_enrich_enabled=True,
-                    max_connections=45,
+                    max_connections=60,
                     no_progressbar=True,
                     retries=0,
                     dns_resolver="threaded",
                 ),
-                timeout=55,
+                timeout=18,
             )
             nodes: list[GraphNode] = []
             edges: list[GraphEdge] = []
@@ -102,14 +104,14 @@ class MaigretPublicConnector:
                 run=SourceRun(
                     name=self.name,
                     status="ok",
-                    message=f"{len(sites)} public sites checked, {len(nodes)} claimed profile(s)",
+                    message=f"{len(sites)} priority public sites checked, {len(nodes)} claimed profile(s)",
                     duration_ms=elapsed,
                 ),
             )
         except asyncio.TimeoutError:
             elapsed = int((time.perf_counter() - started) * 1000)
             return ConnectorResult(run=SourceRun(
-                name=self.name, status="error", message="Maigret scan timed out", duration_ms=elapsed
+                name=self.name, status="error", message="Maigret fast scan timed out", duration_ms=elapsed
             ))
         except Exception as exc:
             elapsed = int((time.perf_counter() - started) * 1000)
