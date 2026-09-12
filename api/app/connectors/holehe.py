@@ -36,16 +36,16 @@ class HoleheConnector:
                 "--no-color",
                 "--no-clear",
                 "--no-password-recovery",
-                "--timeout", "8",
+                "--timeout", "4",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
             try:
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=35)
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=18)
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
-                raise RuntimeError("Holehe scan timed out")
+                raise RuntimeError("Holehe fast scan timed out")
             text = _clean_ansi(stdout.decode(errors="replace"))
             domains: list[str] = []
             checked = 0
