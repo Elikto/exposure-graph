@@ -67,12 +67,13 @@ export function ScanModeController() {
   }, [running, mode, progress, remaining])
 
   if (!target) return null
+  const form = target
 
   function launch(nextMode: ScanMode) {
     if (running) return
     setMode(nextMode)
     ;(window as any).__exposureScanMode = nextMode
-    target.requestSubmit()
+    form.requestSubmit()
   }
 
   return createPortal(
@@ -91,6 +92,6 @@ export function ScanModeController() {
         <div className="scan-progress-label"><span>{Math.round(progress)} % · {elapsed.toFixed(1)} s écoulées</span><span>Estimation</span></div>
       </div>}
     </div>,
-    target,
+    form,
   )
 }
