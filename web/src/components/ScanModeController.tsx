@@ -86,7 +86,7 @@ export function ScanModeController() {
           {running && mode === 'full' ? <Loader2 size={16} className="spin"/> : <Radar size={16}/>} Scan complet
         </button>
       </div>
-      <div className="scan-mode-meta"><span>{mode === 'fast' ? 'Sources essentielles + profils prioritaires' : 'Toutes les sources + enrichissements approfondis'}</span><b>{status}</b></div>
+      <div className="scan-mode-meta"><span>{mode === 'fast' ? 'Sources essentielles + réseaux sociaux prioritaires' : 'Toutes les sources + enrichissements approfondis'}</span><b>{status}</b></div>
       {running && <div className="scan-progress-wrap">
         <div className="scan-progress-track"><span style={{ width: `${progress}%` }}/></div>
         <div className="scan-progress-label"><span>{Math.round(progress)} % · {elapsed.toFixed(1)} s écoulées</span><span>Estimation</span></div>

@@ -13,6 +13,7 @@ import { GraphViewV2 } from './components/GraphViewV2'
 import type { ConnectorStatus, FlowsintStatus, GraphNode, MonitoredIdentity, RemovalLink, SearchResponse, SelectedItem } from './types'
 import './dark-v2.css'
 import './responsive.css'
+import './ergonomics.css'
 
 const kinds = [
   ['auto', 'Détection automatique'], ['email', 'E-mail'], ['phone', 'Téléphone'],
@@ -232,6 +233,7 @@ export default function AppV2() {
   const stats = useMemo(() => ({
     nodes: result?.nodes.length || 0, links: result?.edges.length || 0,
     breaches: result?.breaches.length || 0, sites: siteAppearances.length,
+    socials: siteAppearances.filter(site => site.node.type.toLowerCase() === 'socialaccount' || site.node.properties?.social_network === true).length,
   }), [result, siteAppearances])
   const configured = connectors.filter(c => c.configured).length
   const selectedNode = selected?.kind === 'node' ? selected.data : null
@@ -242,13 +244,13 @@ export default function AppV2() {
     <header className="eg2-topbar">
       <div className="eg2-brand"><span className="eg2-logo"><Network size={19}/></span><div><b>ExposureGraph</b><small>OSINT exposure intelligence</small></div></div>
       <div className="eg2-top-status"><span><i className="dot green"/> {configured}/{connectors.length} sources</span><span><ShieldCheck size={14}/> accès protégé</span></div>
-      <div className="eg2-mobile-actions"><button type="button" aria-label="Ouvrir la recherche" onClick={()=>setMobilePanel(mobilePanel==='left'?null:'left')}><Menu size={18}/><span>Recherche</span></button><button type="button" aria-label="Ouvrir les resultats" onClick={()=>setMobilePanel(mobilePanel==='right'?null:'right')}><PanelRightOpen size={18}/><span>Resultats</span></button></div>
+      <div className="eg2-mobile-actions"><button type="button" aria-label="Ouvrir la recherche" onClick={()=>setMobilePanel(mobilePanel==='left'?null:'left')}><Menu size={18}/><span>Recherche</span></button><button type="button" aria-label="Ouvrir les résultats" onClick={()=>setMobilePanel(mobilePanel==='right'?null:'right')}><PanelRightOpen size={18}/><span>Résultats</span></button></div>
     </header>
 
     {mobilePanel&&<button className="eg2-mobile-backdrop" aria-label="Fermer le panneau" onClick={()=>setMobilePanel(null)}/>}
     <main className="eg2-workspace">
       <aside className={`eg2-left eg2-panel eg2-scroll ${mobilePanel==='left'?'mobile-open':''}`}>
-        <div className="eg2-mobile-panel-head"><b>Recherche & reglages</b><button type="button" onClick={()=>setMobilePanel(null)} aria-label="Fermer"><X size={18}/></button></div>
+        <div className="eg2-mobile-panel-head"><b>Recherche & réglages</b><button type="button" onClick={()=>setMobilePanel(null)} aria-label="Fermer"><X size={18}/></button></div>
         <form className="eg2-search" onSubmit={submit}>
           <div className="eg2-kicker">Nouvelle recherche</div>
           <div className="eg2-searchbox"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="e-mail, téléphone, pseudo, domaine, IP…" autoComplete="off"/></div>
@@ -284,26 +286,29 @@ export default function AppV2() {
       </aside>
 
       <section className="eg2-center eg2-panel">
-        <div className="eg2-graph-head"><div><span>Investigation</span><h1>{result?.query||'Choisis un identifiant à analyser'}</h1></div><div className="eg2-stats"><span><b>{stats.nodes}</b> nœuds</span><span><b>{stats.links}</b> liens</span><span><b>{stats.sites}</b> sites</span><span className={stats.breaches?'warn':''}><b>{stats.breaches}</b> fuites</span></div></div>
+        <div className="eg2-graph-head"><div><span>Investigation</span><h1>{result?.query||'Choisis un identifiant à analyser'}</h1></div><div className="eg2-stats"><span><b>{stats.nodes}</b> nœuds</span><span><b>{stats.links}</b> liens</span><span><b>{stats.sites}</b> sites</span><span><b>{stats.socials}</b> réseaux</span><span className={stats.breaches?'warn':''}><b>{stats.breaches}</b> fuites</span></div></div>
         <div className="eg2-graph">{result?<GraphViewV2 nodes={result.nodes} edges={result.edges} onSelect={selectGraph}/>:<div className="eg2-empty"><div><Network size={42}/></div><h2>Cartographie ton exposition numérique</h2><p>Les résultats publics, profils, pseudos, domaines, fuites et relations apparaîtront ici.</p></div>}</div>
         {!!result?.warnings.length&&<div className="eg2-warning"><AlertTriangle size={14}/>{result.warnings.join(' · ')}</div>}
       </section>
 
       <aside className={`eg2-right eg2-panel ${mobilePanel==='right'?'mobile-open':''}`}>
-        <div className="eg2-mobile-panel-head"><b>RÃ©sultats & dÃ©tails</b><button type="button" onClick={()=>setMobilePanel(null)} aria-label="Fermer"><X size={18}/></button></div>
+        <div className="eg2-mobile-panel-head"><b>Résultats & détails</b><button type="button" onClick={()=>setMobilePanel(null)} aria-label="Fermer"><X size={18}/></button></div>
         <nav className="eg2-tabs"><button className={rightTab==='sites'?'active':''} onClick={()=>setRightTab('sites')}><Globe2 size={14}/> Présence web <b>{siteAppearances.length}</b></button><button className={rightTab==='inspect'?'active':''} onClick={()=>setRightTab('inspect')}><Link2 size={14}/> Inspecteur</button><button className={rightTab==='exposure'?'active':''} onClick={()=>setRightTab('exposure')}><AlertTriangle size={14}/> Expositions</button></nav>
         <div className="eg2-right-scroll eg2-scroll">
           {rightTab==='sites'&&<section className="eg2-tab-content">
             <div className="eg2-section-head"><div><span>Présence de l’identifiant</span><h2>Sites & profils détectés</h2></div><Globe2 size={20}/></div>
-            {result&&<details className="eg2-scan-report" open><summary>Rapport du scan · {result.sources.filter(s=>s.status==='ok').length} sources exécutées</summary><div>{result.sources.map((s,i)=><div key={`${s.name}-${i}`}><span className={`scan-dot ${s.status}`}/><div><b>{s.name}</b><small>{s.message||s.status}</small></div><em>{s.status}</em></div>)}</div></details>}
-            {linkedUsernames.length>0&&<div className="eg2-username-strip"><span>Pseudos liés</span><div>{linkedUsernames.map(u=><button key={u} onClick={()=>{setQuery(u);setKind('username')}}>@{u}</button>)}</div></div>}
-            {selectedAppearance&&<article className="eg2-selected-site"><div className="eg2-selected-icon"><Globe2 size={19}/></div><div><span>Nœud sélectionné</span><h3>{selectedAppearance.platform}</h3><p>{selectedAppearance.username?`@${selectedAppearance.username}`:selectedAppearance.displayName}</p></div><a href={selectedAppearance.url} target="_blank" rel="noreferrer">Ouvrir <ExternalLink size={13}/></a></article>}
-            <div className="eg2-site-list">{siteAppearances.map(site=><article className={`eg2-site-card ${selectedNode?.id===site.node.id?'selected':''}`} key={`${site.node.id}|${site.url}`} onClick={()=>{setSelected({kind:'node',data:site.node});setRightTab('sites')}}>
-              <header><div><b>{site.platform}</b><small>{site.domain}</small></div><span>{site.evidenceLevel} · {Math.round(site.confidence*100)}%</span></header>
+            {result&&<details className="eg2-scan-report eg2-band" open><summary>Rapport du scan · {result.sources.filter(s=>s.status==='ok').length} sources exécutées</summary><div>{result.sources.map((s,i)=><div key={`${s.name}-${i}`}><span className={`scan-dot ${s.status}`}/><div><b>{s.name}</b><small>{s.message||s.status}</small></div><em>{s.status}</em></div>)}</div></details>}
+            {linkedUsernames.length>0&&<details className="eg2-band" open><summary><span><AtSign size={14}/> Pseudos liés</span><b>{linkedUsernames.length}</b></summary><div className="eg2-band-body"><div className="eg2-username-strip"><div>{linkedUsernames.map(u=><button key={u} onClick={()=>{setQuery(u);setKind('username')}}>@{u}</button>)}</div></div></div></details>}
+            {selectedAppearance&&<article className="eg2-selected-site"><div className="eg2-selected-icon"><Globe2 size={19}/></div><div><span>Nœud sélectionné</span><h3>{selectedAppearance.platform}</h3><p>{selectedAppearance.username?`@${selectedAppearance.username}`:selectedAppearance.displayName}</p><a className="eg2-selected-url" href={selectedAppearance.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{selectedAppearance.url}</a></div><a href={selectedAppearance.url} target="_blank" rel="noreferrer">Ouvrir <ExternalLink size={13}/></a></article>}
+            <details className="eg2-band eg2-results-band" open>
+              <summary><span><Globe2 size={14}/> Sites & profils détectés</span><b>{siteAppearances.length}</b></summary>
+              <div className="eg2-band-body"><div className="eg2-site-list">{siteAppearances.map(site=><article className={`eg2-site-card ${selectedNode?.id===site.node.id?'selected':''}`} key={`${site.node.id}|${site.url}`} onClick={()=>{setSelected({kind:'node',data:site.node});setRightTab('sites')}}>
+              <header><div><b>{site.platform}</b><small>{site.domain}</small></div><div className="eg2-card-badges">{site.node.properties?.social_network === true&&<span className="social">Réseau social</span>}<span>{site.evidenceLevel} · {Math.round(site.confidence*100)}%</span></div></header>
+              <a className="eg2-site-url" href={site.url} target="_blank" rel="noreferrer" title={site.url} onClick={e=>e.stopPropagation()}><Globe2 size={12}/><span>{site.url}</span><ExternalLink size={11}/></a>
               <div className="eg2-site-grid"><div><span>Pseudo</span><b>{site.username?`@${site.username}`:'—'}</b></div><div><span>Nom affiché</span><b>{site.displayName||'—'}</b></div><div><span>Création / 1re trace</span><b>{site.createdAt||'Non fournie'}</b></div><div><span>Source</span><b>{site.source}</b></div></div>
               <div className="eg2-card-actions"><a href={site.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}><ExternalLink size={12}/> Ouvrir le profil</a>{site.removal?.url&&<a className="danger" href={site.removal.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}><Trash2 size={12}/> Suppression</a>}</div>
               <details className="eg2-raw" onClick={e=>e.stopPropagation()}><summary>Toutes les informations <ChevronRight size={12}/></summary><div>{Object.entries(site.node.properties||{}).map(([k,v])=><div key={k}><span>{k}</span><b>{clean(v)||'—'}</b></div>)}</div></details>
-            </article>)}{result&&!siteAppearances.length&&<div className="eg2-none">Aucun site/profil n’a encore été retourné par les sources configurées.</div>}</div>
+            </article>)}{result&&!siteAppearances.length&&<div className="eg2-none">Aucun site/profil n’a encore été retourné par les sources configurées.</div>}</div></div></details>
           </section>}
 
           {rightTab==='inspect'&&<section className="eg2-tab-content">
@@ -313,7 +318,9 @@ export default function AppV2() {
 
           {rightTab==='exposure'&&<section className="eg2-tab-content">
             <div className="eg2-section-head"><div><span>Historique connu</span><h2>Fuites & expositions</h2></div><AlertTriangle size={20}/></div>
-            <div className="eg2-breach-list">{result?.breaches.map(b=><article key={b.id}><div className="eg2-breach-dot"/><div><header><b>{b.title}</b><time>{b.breach_date||'Date inconnue'}</time></header>{b.domain&&<a href={`https://${b.domain}`} target="_blank" rel="noreferrer">{b.domain}</a>}<div className="eg2-chips">{b.data_classes.map(x=><span key={x}>{x}</span>)}</div>{b.description&&<p>{cleanHtml(b.description).slice(0,320)}</p>}</div></article>)}{result&&!result.breaches.length&&<div className="eg2-none">Aucune fuite retournée par les sources configurées.</div>}</div>
+            <details className="eg2-band" open>
+              <summary><span><AlertTriangle size={14}/> Expositions détectées</span><b>{result?.breaches.length||0}</b></summary>
+              <div className="eg2-band-body"><div className="eg2-breach-list">{result?.breaches.map(b=><article key={b.id}><div className="eg2-breach-dot"/><div><header><b>{b.title}</b><time>{b.breach_date||'Date inconnue'}</time></header>{b.domain&&<a href={`https://${b.domain}`} target="_blank" rel="noreferrer">{b.domain}</a>}<div className="eg2-chips">{b.data_classes.map(x=><span key={x}>{x}</span>)}</div>{b.description&&<p>{cleanHtml(b.description).slice(0,320)}</p>}</div></article>)}{result&&!result.breaches.length&&<div className="eg2-none">Aucune fuite retournée par les sources configurées.</div>}</div></div></details>
           </section>}
         </div>
       </aside>

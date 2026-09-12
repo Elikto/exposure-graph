@@ -115,7 +115,7 @@ async def fast_search(request: SearchRequest) -> SearchResponse:
             edge_map.setdefault(edge.id, edge)
 
     warnings.append(
-        "Mode rapide: Holehe, Flowsint approfondi et l’énumération large de profils sont ignorés. "
+        "Mode rapide: les réseaux sociaux prioritaires sont inclus; Holehe, Flowsint approfondi et l’énumération large de profils sont ignorés. "
         "Utilisez Scan complet pour la couverture maximale."
     )
     result = SearchResponse(
